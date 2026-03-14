@@ -9,6 +9,7 @@ import statusRoutes    from './routes/status.js';
 import historyRoutes   from './routes/history.js';
 import modelsRoutes    from './routes/models.js';
 import templatesRoutes from './routes/templates.js';
+import comfyuiRoutes   from './routes/comfyui.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -26,6 +27,7 @@ export function createApp() {
   app.use('/api/history',   historyRoutes);
   app.use('/api/models',    modelsRoutes);
   app.use('/api/templates', templatesRoutes);
+  app.use('/api/comfyui',   comfyuiRoutes);
 
   // ── Serve built frontend (production) ────────────────────────────────────
   app.use(express.static(FRONTEND_DIST));

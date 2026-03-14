@@ -10,6 +10,10 @@ const COMFYUI_HOST = '127.0.0.1';
 const COMFYUI_PORT = 8188;
 const PIDS_FILE    = path.join(ITERFORGE_HOME, 'pids.json');
 
+// Shared flag — lets the status API report "starting" while ComfyUI boots
+let _comfyStarting = false;
+export const isComfyStarting = () => _comfyStarting;
+
 export function isPortOpen(host, port, timeoutMs = 1500) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
@@ -49,6 +53,8 @@ export async function startComfyUIBackground() {
   await fs.ensureDir(ITERFORGE_HOME);
   const logFd = openSync(logFile, 'a');
 
+  _comfyStarting = true;
+
   const child = spawn(
     pythonExe,
     ['main.py', '--listen', COMFYUI_HOST, '--port', String(COMFYUI_PORT), '--lowvram'],
@@ -64,4 +70,16 @@ export async function startComfyUIBackground() {
   await fs.writeJson(PIDS_FILE, pids, { spaces: 2 });
 
   console.log(`  ComfyUI launched (PID ${child.pid}) — logs: ${logFile}`);
+
+  // Poll until ComfyUI responds, then clear the starting flag
+  ;(async () => {
+    for (let i = 0; i < 120; i++) {        // up to 4 min
+      await new Promise(r => setTimeout(r, 2000));
+      if (await isPortOpen(COMFYUI_HOST, COMFYUI_PORT)) {
+        _comfyStarting = false;
+        return;
+      }
+    }
+    _comfyStarting = false; // timed out
+  })();
 }
