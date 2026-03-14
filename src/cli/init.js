@@ -41,10 +41,15 @@ export async function runInit(options = {}) {
 
   // ── 1. PATH check ─────────────────────────────────────────────────────────
   if (!checkIterforgeInPath()) {
-    console.error(chalk.red('✗ [ERR_PATH_NOT_FOUND] iterforge is not resolving in PATH.'));
-    console.error('  Detail: MCP configs would point to a missing command and break all agent tool calls.');
-    console.error('  Fix:    ' + chalk.cyan('npm install -g iterforge') + ' then open a new terminal.');
-    process.exit(1);
+    if (process.env.CI) {
+      // CI environments (GitHub Actions etc.) never have iterforge globally installed
+      console.warn(chalk.yellow('⚠ iterforge not found in PATH (CI environment — skipping PATH check)'));
+    } else {
+      console.error(chalk.red('✗ [ERR_PATH_NOT_FOUND] iterforge is not resolving in PATH.'));
+      console.error('  Detail: MCP configs would point to a missing command and break all agent tool calls.');
+      console.error('  Fix:    ' + chalk.cyan('npm install -g iterforge') + ' then open a new terminal.');
+      process.exit(1);
+    }
   }
 
   // ── 2. Detect Godot project ───────────────────────────────────────────────
