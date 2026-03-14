@@ -6,17 +6,22 @@ on:
       - 'v*.*.*'
 
 jobs:
+  # ── Run tests on all three platforms ─────────────────────────────────────────
   test:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       - run: npm install
       - run: npm test
 
+  # ── Publish to npm (once, from Linux) ────────────────────────────────────────
   publish-npm:
     needs: test
     runs-on: ubuntu-latest
@@ -24,27 +29,70 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
       - run: npm install
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  build-exe:
+  # ── Build Windows installer (.exe) ───────────────────────────────────────────
+  build-windows:
     needs: test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       - run: npm install
       - name: Build Windows installer
         run: npm run build:exe
-      - name: Upload to GitHub Release
+      - name: Upload Windows installer
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          files: dist/IterForge-Setup-*.exe
           generate_release_notes: true
+
+  # ── Build macOS installer (.pkg / .dmg) ──────────────────────────────────────
+  build-macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm install
+      - name: Build macOS installer
+        run: npm run build:mac
+      - name: Upload macOS installer
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/IterForge-*.dmg
+          generate_release_notes: false
+
+  # ── Build Linux installer (.deb + AppImage) ───────────────────────────────────
+  build-linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm install
+      - name: Install Linux build dependencies
+        run: sudo apt-get install -y rpm fakeroot
+      - name: Build Linux packages
+        run: npm run build:linux
+      - name: Upload Linux packages
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/IterForge-*.AppImage
+            dist/iterforge_*.deb
+          generate_release_notes: false
