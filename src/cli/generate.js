@@ -6,73 +6,117 @@ import { PromptEngine } from '../prompts/engine.js';
 import { generate as routerGenerate } from '../backends/router.js';
 import { verifyModel } from '../backends/comfyui.js';
 
-// V1 supported types
-const SUPPORTED_TYPES = ['arena', 'card'];
+const PRESET_TYPES = ['arena', 'card'];
 
-/** Build output filename per spec §A9 */
-function buildFilename(type, faction, atmosphere, condition, seed) {
-  return `${type}_${faction}_${atmosphere}_${condition}_${seed}.png`
+const DEFAULT_NEGATIVE =
+  'blurry, low quality, jpeg artifacts, watermark, signature, text, logo, ' +
+  'distorted, duplicate, out of frame, worst quality, low resolution, pixelated, ' +
+  'oversaturated, overexposed, underexposed';
+
+/** Build output filename for preset mode per spec §A9 */
+function buildPresetFilename(type, faction, atmosphere, condition, seed, hasRef) {
+  const base = `${type}_${faction}_${atmosphere}_${condition}${hasRef ? '_remix' : ''}_${seed}`;
+  return base.toLowerCase().replace(/\s+/g, '_') + '.png';
+}
+
+/** Build output filename for custom prompt mode */
+function buildCustomFilename(prompt, seed, hasRef) {
+  const slug = prompt
+    .slice(0, 40)
     .toLowerCase()
-    .replace(/\s+/g, '_');
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+  const prefix = hasRef ? 'remix' : 'custom';
+  return `${prefix}_${slug}_${seed}.png`;
 }
 
 export async function runGenerate(type, opts) {
-  // ── 1. Validate type ───────────────────────────────────────────────────
-  if (!SUPPORTED_TYPES.includes(type)) {
-    console.error(chalk.red(`✗ [ERR_INVALID_TYPE] "${type}" is not supported in V1. Supported: ${SUPPORTED_TYPES.join(', ')}`));
+  const isCustom = Boolean(opts.prompt);
+  const isPreset = Boolean(type) && PRESET_TYPES.includes(type);
+
+  // ── Validate mode ───────────────────────────────────────────────────────────
+  if (!isCustom && !isPreset) {
+    if (type && !PRESET_TYPES.includes(type)) {
+      console.error(chalk.red(`✗ [ERR_INVALID_TYPE] Unknown preset type "${type}". Supported: ${PRESET_TYPES.join(', ')}`));
+      console.error('  Or skip the type and use: ' + chalk.cyan('iterforge generate --prompt "your prompt"'));
+    } else {
+      console.error(chalk.red('✗ Provide a preset type (arena|card) or use --prompt'));
+      console.error('  Examples:');
+      console.error('    ' + chalk.cyan('iterforge generate arena --faction AEGIS'));
+      console.error('    ' + chalk.cyan('iterforge generate --prompt "dark fantasy castle, game art"'));
+    }
     process.exit(1);
   }
 
-  // ── 2. Load project context ────────────────────────────────────────────
+  // ── Load project context ────────────────────────────────────────────────────
   const config = await ContextManager.read();
   if (!config) {
     console.error(chalk.red('✗ [ERR_NO_PROJECT] No iterforge.json found. Run: iterforge init'));
     process.exit(1);
   }
 
-  // ── 3. Merge settings (CLI flags override stored settings) ────────────
+  // ── Build shared settings ───────────────────────────────────────────────────
+  const seed = opts.seed !== undefined ? Number(opts.seed) : Math.floor(Math.random() * 2 ** 32);
   const settings = {
-    faction:    opts.faction    ?? config.active.faction    ?? 'AEGIS',
-    atmosphere: opts.atmosphere ?? config.settings.atmosphere ?? 'midday',
-    condition:  opts.condition  ?? config.settings.condition  ?? 'standard',
-    zoom:       opts.zoom       !== undefined ? Number(opts.zoom)       : config.settings.zoom,
-    darkness:   opts.darkness   !== undefined ? Number(opts.darkness)   : config.settings.darkness,
-    noise:      opts.noise      !== undefined ? Number(opts.noise)      : config.settings.noise,
-    steps:      opts.steps      !== undefined ? Number(opts.steps)      : config.settings.steps,
-    cfg:        opts.cfg        !== undefined ? Number(opts.cfg)        : config.settings.cfg,
-    seed:       opts.seed       !== undefined ? Number(opts.seed)       : Math.floor(Math.random() * 2 ** 32),
-    width:      config.settings.width  ?? 1024,
-    height:     config.settings.height ?? 1024,
-    backend:    opts.backend    ?? config.backend_override ?? null,
-    noCloud:    opts.noCloud    ?? false,
+    steps:         opts.steps    !== undefined ? Number(opts.steps)    : config.settings?.steps    ?? 30,
+    cfg:           opts.cfg      !== undefined ? Number(opts.cfg)      : config.settings?.cfg      ?? 7.0,
+    seed,
+    width:         opts.width    !== undefined ? Number(opts.width)    : config.settings?.width    ?? 1024,
+    height:        opts.height   !== undefined ? Number(opts.height)   : config.settings?.height   ?? 1024,
+    sampler:       opts.sampler  ?? null,
+    backend:       opts.backend  ?? config.backend_override ?? null,
+    noCloud:       opts.noCloud  ?? false,
+    model:         opts.model    ?? null,
+    referencePath: opts.reference ?? null,
+    strength:      opts.strength !== undefined ? Number(opts.strength) : 0.75,
   };
 
-  // ── 4. Build prompt ────────────────────────────────────────────────────
-  const { positive, negative } = PromptEngine.build({
-    type,
-    faction:    settings.faction,
-    atmosphere: settings.atmosphere,
-    darkness:   settings.darkness,
-    zoom:       settings.zoom,
-    noise:      settings.noise,
-    condition:  settings.condition,
-  });
+  // ── Build prompts ───────────────────────────────────────────────────────────
+  let positive, negative, outputType;
 
-  // ── 5. Dry run ─────────────────────────────────────────────────────────
+  if (isCustom) {
+    positive    = opts.prompt;
+    negative    = opts.negative ?? DEFAULT_NEGATIVE;
+    outputType  = 'custom';
+  } else {
+    // Preset mode — faction/atmosphere/condition drive the PromptEngine
+    const presetSettings = {
+      faction:    opts.faction    ?? config.active?.faction    ?? 'AEGIS',
+      atmosphere: opts.atmosphere ?? config.settings?.atmosphere ?? 'midday',
+      condition:  opts.condition  ?? config.settings?.condition  ?? 'standard',
+      zoom:       opts.zoom       !== undefined ? Number(opts.zoom)     : config.settings?.zoom     ?? 2,
+      darkness:   opts.darkness   !== undefined ? Number(opts.darkness) : config.settings?.darkness ?? 3,
+      noise:      opts.noise      !== undefined ? Number(opts.noise)    : config.settings?.noise    ?? 1,
+    };
+    const built = PromptEngine.build({ type, ...presetSettings });
+    positive   = built.positive;
+    negative   = built.negative;
+    outputType = type;
+
+    // Stash for filename building
+    settings.faction    = presetSettings.faction;
+    settings.atmosphere = presetSettings.atmosphere;
+    settings.condition  = presetSettings.condition;
+  }
+
+  // ── Dry run ─────────────────────────────────────────────────────────────────
   if (opts.dryRun) {
-    console.log(chalk.bold('\nDry run — no image will be generated\n'));
+    const mode = settings.referencePath ? 'img2img' : 'txt2img';
+    console.log(chalk.bold(`\nDry run — mode: ${mode}\n`));
     console.log(chalk.bold('Positive prompt:'));
     console.log(' ', positive);
     console.log(chalk.bold('\nNegative prompt:'));
     console.log(' ', negative);
     console.log(chalk.bold('\nSettings:'));
-    for (const [k, v] of Object.entries(settings)) {
-      console.log(`  ${k.padEnd(12)} ${v}`);
+    const display = { ...settings, mode };
+    delete display.noCloud;
+    for (const [k, v] of Object.entries(display)) {
+      if (v !== null) console.log(`  ${k.padEnd(14)} ${v}`);
     }
     return;
   }
 
-  // ── 6. Verify model before first generate ─────────────────────────────
+  // ── Verify model ────────────────────────────────────────────────────────────
   try {
     await verifyModel();
   } catch (err) {
@@ -80,23 +124,33 @@ export async function runGenerate(type, opts) {
     process.exit(1);
   }
 
-  // ── 7. Generate ────────────────────────────────────────────────────────
-  const outputDir = path.join(process.cwd(), config.project.assets_path ?? 'assets/iterforge');
-  const spinner = ora(`Generating ${type} (${settings.faction} / ${settings.atmosphere})...`).start();
+  // ── Generate ────────────────────────────────────────────────────────────────
+  const outputDir = path.join(process.cwd(), config.project?.assets_path ?? 'assets/iterforge');
+  const hasRef    = Boolean(settings.referencePath);
+  const modeLabel = hasRef ? 'img2img' : 'txt2img';
+  const label     = isCustom
+    ? `image (${modeLabel})`
+    : `${type} (${settings.faction} / ${settings.atmosphere}, ${modeLabel})`;
+
+  const spinner = ora(`Generating ${label}...`).start();
 
   let result;
   try {
     result = await routerGenerate({
-      type,
+      type: outputType,
       positive,
       negative,
-      steps:   settings.steps,
-      cfg:     settings.cfg,
-      seed:    settings.seed,
-      width:   settings.width,
-      height:  settings.height,
-      backend: settings.backend,
-      noCloud: settings.noCloud,
+      steps:         settings.steps,
+      cfg:           settings.cfg,
+      seed:          settings.seed,
+      width:         settings.width,
+      height:        settings.height,
+      sampler:       settings.sampler,
+      backend:       settings.backend,
+      noCloud:       settings.noCloud,
+      model:         settings.model,
+      referencePath: settings.referencePath,
+      strength:      settings.strength,
       outputDir,
     });
   } catch (err) {
@@ -104,23 +158,28 @@ export async function runGenerate(type, opts) {
     process.exit(1);
   }
 
-  // Rename file to spec §A9 convention
-  const destFilename = buildFilename(type, settings.faction, settings.atmosphere, settings.condition, result.seed);
+  // ── Rename to convention ────────────────────────────────────────────────────
+  const { default: fse } = await import('fs-extra');
+  let destFilename;
+  if (isCustom) {
+    destFilename = buildCustomFilename(positive, result.seed, hasRef);
+  } else {
+    destFilename = buildPresetFilename(outputType, settings.faction, settings.atmosphere, settings.condition, result.seed, hasRef);
+  }
   const destPath = path.join(outputDir, destFilename);
-
-  const { default: fs } = await import('fs-extra');
   if (result.imagePath !== destPath) {
-    await fs.move(result.imagePath, destPath, { overwrite: true });
+    await fse.move(result.imagePath, destPath, { overwrite: true });
   }
 
   spinner.succeed(`Generated: ${destFilename}  [${result.backend}]`);
 
-  // ── 8. Update iterforge.json ───────────────────────────────────────────
+  // ── Update iterforge.json ───────────────────────────────────────────────────
   const newEntry = {
     image_path:   destPath,
     prompt:       positive,
     backend_used: result.backend,
     seed:         result.seed,
+    mode:         modeLabel,
     timestamp:    new Date().toISOString(),
   };
 
@@ -134,15 +193,15 @@ export async function runGenerate(type, opts) {
       ...config.godot_sync,
       pending_assets: [
         ...(config.godot_sync?.pending_assets ?? []),
-        { path: destPath, type, timestamp: newEntry.timestamp }
+        { path: destPath, type: outputType, timestamp: newEntry.timestamp }
       ]
     }
   });
 
-  // ── 9. Summary ─────────────────────────────────────────────────────────
+  // ── Summary ─────────────────────────────────────────────────────────────────
   console.log(`  Path:   ${chalk.cyan(destPath)}`);
   console.log(`  Seed:   ${result.seed}  (use --seed ${result.seed} to reproduce)`);
-  if (opts.exportGodot) {
-    console.log(chalk.yellow('  --export godot: Godot export not yet implemented (Phase 9).'));
+  if (hasRef) {
+    console.log(`  Ref:    ${chalk.cyan(settings.referencePath)}  (strength ${settings.strength})`);
   }
 }

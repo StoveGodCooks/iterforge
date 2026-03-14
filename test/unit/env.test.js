@@ -1,18 +1,21 @@
+import path from 'path';
 import { readEnv } from '../../src/env/reader.js';
 import { writeEnv, updateEnv } from '../../src/env/writer.js';
 import fs from 'fs-extra';
 import { ITERFORGE_HOME } from '../../src/env/reader.js';
 
 async function test() {
-  // Backup existing env if present
-  const backupPath = ITERFORGE_HOME + '.backup';
-  if (await fs.pathExists(ITERFORGE_HOME)) {
-    await fs.copy(ITERFORGE_HOME, backupPath);
+  // Only back up / restore env.json — never remove the whole ITERFORGE_HOME
+  // because ComfyUI (or other managed processes) may have the directory locked.
+  const envFile = path.join(ITERFORGE_HOME, 'env.json');
+  const backupEnv = ITERFORGE_HOME + '-env.backup.json';
+  if (await fs.pathExists(envFile)) {
+    await fs.copy(envFile, backupEnv);
   }
 
   try {
-    // Clear for clean test
-    await fs.remove(ITERFORGE_HOME);
+    // Remove only env.json so readEnv falls back to defaults
+    await fs.remove(envFile);
 
     // Test: readEnv returns defaults when missing
     let env = await readEnv();
@@ -31,9 +34,10 @@ async function test() {
     if (!env.tools.other) throw new Error('updateEnv: new tool not merged');
 
   } finally {
-    await fs.remove(ITERFORGE_HOME);
-    if (await fs.pathExists(backupPath)) {
-      await fs.move(backupPath, ITERFORGE_HOME, { overwrite: true });
+    // Restore original env.json (or clean up the test one)
+    await fs.remove(envFile);
+    if (await fs.pathExists(backupEnv)) {
+      await fs.move(backupEnv, envFile, { overwrite: true });
     }
   }
 }

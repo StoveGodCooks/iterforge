@@ -6,39 +6,58 @@ import fetch from 'node-fetch';
 import { ITERFORGE_HOME } from './reader.js';
 import { registerTool } from './writer.js';
 
-const VENV_DIR    = path.join(ITERFORGE_HOME, 'venv');
-const VENV_PYTHON = path.join(VENV_DIR, 'Scripts', 'python.exe');
-const VENV_PIP    = path.join(VENV_DIR, 'Scripts', 'pip.exe');
+// Install packages directly into python-base — no separate venv, no installer.
+// Uses the embeddable Python zip (no admin/MSI required).
+const BASE_DIR    = path.join(ITERFORGE_HOME, 'python-base');
+const BASE_PYTHON = path.join(BASE_DIR, 'python.exe');
 const COMFYUI_DIR = path.join(ITERFORGE_HOME, 'comfyui');
 const COMFYUI_REPO = 'https://github.com/comfyanonymous/ComfyUI.git';
 
-// IterForge always uses its own managed Python 3.11.9 — never the system Python.
-// This guarantees PyTorch CUDA compatibility regardless of what the user has installed.
-
-// ── Download & silently install full Python 3.11.9 ───────────────────────────
+// ── Download & extract embeddable Python 3.11.9 (no installer needed) ────────
 async function downloadPython(spinner) {
-  const url = 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe';
-  const dest = path.join(ITERFORGE_HOME, 'python-installer.exe');
-  const installDir = path.join(ITERFORGE_HOME, 'python-base');
-
-  if (await fs.pathExists(path.join(installDir, 'python.exe'))) {
-    return path.join(installDir, 'python.exe');
+  if (await fs.pathExists(BASE_PYTHON)) {
+    return BASE_PYTHON;
   }
 
-  spinner.text = 'Downloading Python 3.11.9 (~25 MB)...';
-  await fs.ensureDir(ITERFORGE_HOME);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Python download failed: ${res.status}`);
-  const buf = await res.buffer();
-  await fs.writeFile(dest, buf);
+  const EMBED_URL = 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip';
+  const zipDest   = path.join(ITERFORGE_HOME, 'python-embed.zip');
 
-  spinner.text = 'Installing Python 3.11.9...';
+  spinner.text = 'Downloading Python 3.11.9 (~10 MB)...';
+  await fs.ensureDir(ITERFORGE_HOME);
+  // Clean any partial extract
+  await fs.remove(BASE_DIR);
+  await fs.ensureDir(BASE_DIR);
+
+  const res = await fetch(EMBED_URL);
+  if (!res.ok) throw new Error(`Python download failed: ${res.status}`);
+  await fs.writeFile(zipDest, Buffer.from(await res.arrayBuffer()));
+
+  spinner.text = 'Extracting Python 3.11.9...';
   execSync(
-    `"${dest}" /passive InstallAllUsers=0 PrependPath=0 Include_launcher=0 TargetDir="${installDir}"`,
-    { stdio: 'ignore', timeout: 120_000 }
+    `powershell -NoProfile -Command "Expand-Archive -Path '${zipDest}' -DestinationPath '${BASE_DIR}' -Force"`,
+    { stdio: 'ignore', timeout: 60_000 }
   );
-  await fs.remove(dest);
-  return path.join(installDir, 'python.exe');
+  await fs.remove(zipDest);
+
+  // Embeddable Python: enable site-packages AND add ComfyUI to sys.path.
+  // NOTE: embeddable Python's ._pth file suppresses PYTHONPATH entirely —
+  // the only way to add paths is by editing this file directly.
+  const pthFile = path.join(BASE_DIR, 'python311._pth');
+  if (await fs.pathExists(pthFile)) {
+    let content = await fs.readFile(pthFile, 'utf8');
+    content = content.replace('#import site', 'import site');
+    // Add ComfyUI dir so 'import comfy' works when ComfyUI runs
+    if (!content.includes(COMFYUI_DIR)) {
+      content += `\n${COMFYUI_DIR}\n`;
+    }
+    await fs.writeFile(pthFile, content);
+  }
+
+  if (!(await fs.pathExists(BASE_PYTHON))) {
+    throw new Error('Python extraction failed — python.exe not found after unzip.');
+  }
+
+  return BASE_PYTHON;
 }
 
 export class EnvManager {
@@ -47,7 +66,7 @@ export class EnvManager {
     const spinner = ora('Checking managed environment...').start();
 
     try {
-      const pythonExe = await this.ensureVenv(spinner);
+      const pythonExe = await this.ensurePython(spinner);
       await this.ensureComfyUI(spinner, pythonExe);
       spinner.succeed('Managed environment ready.');
     } catch (err) {
@@ -56,27 +75,35 @@ export class EnvManager {
     }
   }
 
-  // ── Step 1: ensure a working venv exists ───────────────────────────────────
-  static async ensureVenv(spinner) {
-    // Always use managed Python 3.11.9 — never trust system Python version
+  // ── Step 1: ensure Python 3.11.9 with pip is ready ─────────────────────────
+  static async ensurePython(spinner) {
     const basePython = await downloadPython(spinner);
 
-    // If venv already exists and was built from our managed Python, reuse it
-    if (await fs.pathExists(VENV_PYTHON)) {
-      await registerTool('python', { path: VENV_PYTHON, version: 'venv-3.11.9', managed: true });
-      return VENV_PYTHON;
+    // Always patch the ._pth file — runs even when python-base already exists.
+    // Embeddable Python suppresses PYTHONPATH; this is the only way to add paths.
+    const pthFile = path.join(BASE_DIR, 'python311._pth');
+    if (await fs.pathExists(pthFile)) {
+      let pth = await fs.readFile(pthFile, 'utf8');
+      let changed = false;
+      if (pth.includes('#import site')) { pth = pth.replace('#import site', 'import site'); changed = true; }
+      if (!pth.includes(COMFYUI_DIR))   { pth += `\n${COMFYUI_DIR}\n`; changed = true; }
+      if (changed) await fs.writeFile(pthFile, pth);
     }
 
-    spinner.text = 'Creating Python virtual environment...';
-    await fs.ensureDir(ITERFORGE_HOME);
-    execSync(`"${basePython}" -m venv "${VENV_DIR}"`, { stdio: 'ignore' });
-
-    if (!(await fs.pathExists(VENV_PYTHON))) {
-      throw new Error('venv creation failed — python.exe not found after venv init.');
+    // Embeddable Python ships without pip — bootstrap it with get-pip.py
+    const basePip = path.join(BASE_DIR, 'Scripts', 'pip.exe');
+    if (!(await fs.pathExists(basePip))) {
+      spinner.text = 'Bootstrapping pip (~2 MB)...';
+      const getpipDest = path.join(ITERFORGE_HOME, 'get-pip.py');
+      const r = await fetch('https://bootstrap.pypa.io/get-pip.py');
+      if (!r.ok) throw new Error(`Failed to fetch get-pip.py: ${r.status}`);
+      await fs.writeFile(getpipDest, Buffer.from(await r.arrayBuffer()));
+      execSync(`"${basePython}" "${getpipDest}" --quiet`, { stdio: 'ignore', timeout: 60_000 });
+      await fs.remove(getpipDest);
     }
 
-    await registerTool('python', { path: VENV_PYTHON, version: 'venv-3.11.9', managed: true });
-    return VENV_PYTHON;
+    await registerTool('python', { path: basePython, version: '3.11.9', managed: true });
+    return basePython;
   }
 
   // ── Step 2: ensure ComfyUI is cloned & deps installed ──────────────────────
@@ -84,13 +111,10 @@ export class EnvManager {
     const alreadyCloned = await fs.pathExists(path.join(COMFYUI_DIR, 'main.py'));
 
     if (!alreadyCloned) {
-      // Verify git
       try {
         execSync('git --version', { stdio: 'ignore' });
       } catch {
-        throw new Error(
-          'Git is required. Install from https://git-scm.com and retry.'
-        );
+        throw new Error('Git is required. Install from https://git-scm.com and retry.');
       }
 
       spinner.text = 'Cloning ComfyUI (this is a one-time step)...';
@@ -104,30 +128,24 @@ export class EnvManager {
     const cudaOk = await this._cudaAvailable(pythonExe);
 
     if (!cudaOk) {
-      // Install (or force-reinstall) PyTorch with CUDA 12.1
-      // --force-reinstall ensures CPU-only torch gets replaced even if present
       spinner.text = 'Installing PyTorch with CUDA 12.1 (~2 GB, one-time)...';
       execSync(
-        `"${VENV_PIP}" install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --force-reinstall --quiet`,
-        { stdio: 'ignore', timeout: 600_000 }
+        `"${pythonExe}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --force-reinstall --quiet`,
+        { stdio: 'ignore', timeout: 1_800_000 }   // 30 min — large CUDA wheels
       );
     }
 
     // Use a marker file for the remaining deps (yaml, PIL, etc.)
     const depsMarker = path.join(ITERFORGE_HOME, 'comfyui-deps.ok');
-    const depsInstalled = await fs.pathExists(depsMarker);
-
-    if (!depsInstalled) {
-      // Install remaining ComfyUI deps (pip skips already-installed packages)
+    if (!(await fs.pathExists(depsMarker))) {
       spinner.text = 'Installing ComfyUI dependencies...';
       const reqFile = path.join(COMFYUI_DIR, 'requirements.txt');
       if (await fs.pathExists(reqFile)) {
         execSync(
-          `"${VENV_PIP}" install -r "${reqFile}" --quiet`,
+          `"${pythonExe}" -m pip install -r "${reqFile}" --quiet`,
           { stdio: 'ignore', timeout: 300_000 }
         );
       }
-      // Write marker only after deps succeed
       await fs.writeFile(depsMarker, new Date().toISOString());
     }
 
@@ -147,9 +165,8 @@ export class EnvManager {
 
     const files = await fs.readdir(checkpointsDir);
     const hasSafetensors = files.some(f => f.endsWith('.safetensors') || f.endsWith('.ckpt'));
-    if (hasSafetensors) return; // already have a model
+    if (hasSafetensors) return;
 
-    // Download official Stability AI SDXL 1.0 base from HuggingFace (~6.9 GB)
     const MODEL_URL = 'https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors';
     const modelDest = path.join(checkpointsDir, 'sd_xl_base_1.0.safetensors');
     const tmpDest   = modelDest + '.tmp';
@@ -179,15 +196,6 @@ export class EnvManager {
 
     await fs.rename(tmpDest, modelDest);
     spinner.text = 'SDXL model ready.';
-  }
-
-  static async _packageInstalled(pythonExe, pkg) {
-    try {
-      execSync(`"${pythonExe}" -c "import ${pkg}"`, { stdio: 'ignore' });
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   // Returns true only if torch is installed AND CUDA is available

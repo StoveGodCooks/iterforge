@@ -5,7 +5,8 @@ import os from 'os';
 import net from 'net';
 
 export const ITERFORGE_HOME = path.join(os.homedir(), 'AppData', 'Roaming', 'IterForge');
-const BIN_PATH = path.join(ITERFORGE_HOME, 'bin');
+const VENV_PYTHON   = path.join(ITERFORGE_HOME, 'venv', 'Scripts', 'python.exe');
+const BASE_PYTHON   = path.join(ITERFORGE_HOME, 'python-base', 'python.exe');
 const COMFYUI_PORT = 8188;
 const COMFYUI_HOST = '127.0.0.1';
 
@@ -61,12 +62,14 @@ export class EnvDetector {
 
   // ── Python ───────────────────────────────────────────────────────────────
   static async checkPython() {
-    const managedPython = path.join(BIN_PATH, 'python', 'python.exe');
-    if (await fs.pathExists(managedPython)) {
-      try {
-        const v = execSync(`"${managedPython}" --version`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-        return { status: 'OK', version: v, type: 'managed', path: managedPython };
-      } catch {}
+    // Prefer venv Python (primary managed path), fall back to python-base
+    for (const managedPython of [VENV_PYTHON, BASE_PYTHON]) {
+      if (await fs.pathExists(managedPython)) {
+        try {
+          const v = execSync(`"${managedPython}" --version`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+          return { status: 'OK', version: v, type: 'managed', path: managedPython };
+        } catch {}
+      }
     }
 
     try {

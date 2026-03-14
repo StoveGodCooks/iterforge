@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "iterforge": {
+      "command": "iterforge",
+      "args": [
+        "mcp"
+      ],
+      "description": "IterForge: open-source game asset pipeline. Local AI generation, Godot integration."
+    }
+  }
+}

@@ -7,19 +7,93 @@
     "iterforge": "bin/iterforge.js"
   },
   "scripts": {
-    "start": "node bin/iterforge.js",
-    "test": "node test/runner.js",
-    "gui": "electron ."
+    "start":            "node bin/iterforge.js",
+    "test":             "node test/runner.js",
+    "app":              "node launcher.js",
+    "dev:server":       "node src/server/dev-server.js",
+    "dev:frontend":     "npm --prefix frontend run dev",
+    "build:frontend":   "npm --prefix frontend run build",
+    "gui":              "electron .",
+    "build:exe":        "electron-builder --win --publish never",
+    "build:mac":        "electron-builder --mac --publish never",
+    "build:linux":      "electron-builder --linux --publish never",
+    "build:all":        "electron-builder --win --mac --linux --publish never"
+  },
+  "build": {
+    "appId": "com.iterforge.app",
+    "productName": "IterForge",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "bin/**",
+      "src/**",
+      "comfyui-workflows/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "IterForge-Setup-${version}.exe"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "IterForge-${version}.dmg",
+      "category": "public.app-category.graphics-design"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "IterForge-${version}.AppImage",
+      "category": "Graphics"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.0.4",
-    "commander": "^12.0.0",
     "chalk": "^5.0.0",
-    "ora": "^8.0.0",
-    "sharp": "0.33.3",
-    "node-fetch": "3.3.2",
+    "commander": "^12.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
     "fs-extra": "^11.2.0",
-    "dotenv": "^16.4.5"
+    "multer": "^2.1.1",
+    "node-fetch": "3.3.2",
+    "open": "^11.0.0",
+    "ora": "^8.0.0",
+    "sharp": "0.33.3"
   },
   "devDependencies": {
     "electron": "30.0.9",

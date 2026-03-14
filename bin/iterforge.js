@@ -50,21 +50,38 @@ program
 
 // ── generate ──────────────────────────────────────────────────────────────
 program
-  .command('generate <type>')
-  .description('Generate a game asset (arena | card)')
-  .option('--faction <n>',    'AEGIS | ECLIPSE | SPECTER')
-  .option('--atmosphere <n>', 'midday | nighttime | rain | flooded')
-  .option('--condition <n>',  'standard | damaged | flooded')
-  .option('--zoom <n>',       'framing 0-4', parseInt)
-  .option('--darkness <n>',   'darkness 0-4', parseInt)
-  .option('--noise <n>',      'noise 0-4', parseInt)
-  .option('--steps <n>',      'inference steps', parseInt)
-  .option('--cfg <n>',        'CFG scale', parseFloat)
-  .option('--seed <n>',       'fixed seed', parseInt)
-  .option('--backend <name>', 'force specific backend')
-  .option('--no-cloud',       'never use cloud backends')
-  .option('--export-godot',   'auto-export to Godot after generation')
-  .option('--dry-run',        'print prompt + settings, do not generate')
+  .command('generate [type]')
+  .description(
+    'Generate an image — preset type (arena|card) or free-form --prompt\n' +
+    '  Preset:  iterforge generate arena --faction AEGIS\n' +
+    '  Custom:  iterforge generate --prompt "dark castle, game art"\n' +
+    '  Remix:   iterforge generate --prompt "..." --reference photo.png'
+  )
+  // ── prompt (custom mode) ──
+  .option('--prompt <text>',     'free-form positive prompt (skips the preset engine)')
+  .option('--negative <text>',   'negative prompt (used with --prompt)')
+  // ── inspiration image (img2img) ──
+  .option('--reference <path>',  'path to reference/inspiration image (enables img2img)')
+  .option('--strength <n>',      'how much to change the reference 0-1 (default 0.75)', parseFloat)
+  // ── preset options ──
+  .option('--faction <n>',       'AEGIS | ECLIPSE | SPECTER  (preset mode only)')
+  .option('--atmosphere <n>',    'midday | nighttime | rain | flooded  (preset mode only)')
+  .option('--condition <n>',     'standard | damaged | flooded  (preset mode only)')
+  .option('--zoom <n>',          'framing 0-4  (preset mode only)', parseInt)
+  .option('--darkness <n>',      'darkness 0-4  (preset mode only)', parseInt)
+  .option('--noise <n>',         'noise 0-4  (preset mode only)', parseInt)
+  // ── generation controls ──
+  .option('--model <filename>',  'checkpoint filename to use (e.g. dreamshaper_xl.safetensors)')
+  .option('--width <n>',         'output width in pixels', parseInt)
+  .option('--height <n>',        'output height in pixels', parseInt)
+  .option('--steps <n>',         'inference steps (default 30)', parseInt)
+  .option('--cfg <n>',           'CFG scale (default 7.0)', parseFloat)
+  .option('--seed <n>',          'fixed seed for reproducibility', parseInt)
+  .option('--sampler <name>',    'sampler name (dpmpp_2m_sde | euler | dpmpp_2m | ...)')
+  .option('--backend <name>',    'force specific backend')
+  .option('--no-cloud',          'never use cloud backends')
+  .option('--export-godot',      'auto-export to Godot after generation')
+  .option('--dry-run',           'print prompt + settings, do not generate')
   .action(async (type, opts) => {
     try {
       await runGenerate(type, opts);

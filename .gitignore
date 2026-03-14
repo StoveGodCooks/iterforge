@@ -7,3 +7,13 @@ dist/
 build/
 .claude/
 C:\Users\beebo\.gemini\tmp\
+
+# Generated assets (user images — not committed)
+assets/iterforge/
+
+# Local project state
+iterforge.json
+
+# IterForge runtime files
+*.tmp
+*.part

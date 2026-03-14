@@ -67,24 +67,37 @@ async function startComfyUI(env) {
     return;
   }
 
-  // Not installed at all
+  // env.json missing comfyui entry — fall back to well-known filesystem paths
   if (!comfyTool) {
-    console.error(chalk.red('✗ [ERR_COMFYUI_NOT_INSTALLED] ComfyUI is not installed.'));
-    console.error('  Fix: ' + chalk.cyan('iterforge install'));
-    process.exit(1);
+    const fallbackComfy  = path.join(ITERFORGE_HOME, 'comfyui');
+    const fallbackMainPy = path.join(fallbackComfy, 'main.py');
+    if (!(await fs.pathExists(fallbackMainPy))) {
+      console.error(chalk.red('✗ [ERR_COMFYUI_NOT_INSTALLED] ComfyUI is not installed.'));
+      console.error('  Fix: ' + chalk.cyan('iterforge install'));
+      process.exit(1);
+    }
+    // Reconstruct the tool entry from filesystem so install isn't required
+    env.tools = env.tools ?? {};
+    env.tools.comfyui = { path: fallbackComfy, url: 'http://127.0.0.1:8188', managed: true };
   }
 
-  // Resolve python executable (managed preferred)
+  // Resolve python executable — prefer env.json, fall back to known paths
   const pythonTool = env.tools?.python;
-  const pythonExe = pythonTool?.path ?? 'python';
-  const comfyDir = comfyTool.path;
+  const fallbackPython = await (async () => {
+    const venvPy = path.join(ITERFORGE_HOME, 'venv', 'Scripts', 'python.exe');
+    const basePy = path.join(ITERFORGE_HOME, 'python-base', 'python.exe');
+    if (await fs.pathExists(venvPy)) return venvPy;
+    if (await fs.pathExists(basePy)) return basePy;
+    return 'python';
+  })();
+  const pythonExe = pythonTool?.path ?? fallbackPython;
+  const comfyDir = env.tools.comfyui.path;
 
   const logFile = path.join(ITERFORGE_HOME, 'comfyui.log');
   await fs.ensureDir(ITERFORGE_HOME);
   const logFd = openSync(logFile, 'a');
   const spinner = ora(`Starting ComfyUI... logs: ${logFile}`).start();
 
-  // venv Python has correct sys.path automatically — no PYTHONPATH hacks needed
   const child = spawn(
     pythonExe,
     ['main.py', '--listen', COMFYUI_HOST, '--port', String(COMFYUI_PORT), '--lowvram'],
