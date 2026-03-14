@@ -2,22 +2,23 @@
   "name": "iterforge",
   "version": "1.0.0",
   "description": "IterForge - Game Asset Generation Pipeline Orchestrator",
-  "main": "src/index.js",
+  "author": "StoveGodCooks",
+  "main": "electron-main.js",
   "bin": {
     "iterforge": "bin/iterforge.js"
   },
   "scripts": {
-    "start":            "node bin/iterforge.js",
-    "test":             "node test/runner.js",
-    "app":              "node launcher.js",
-    "dev:server":       "node src/server/dev-server.js",
-    "dev:frontend":     "npm --prefix frontend run dev",
-    "build:frontend":   "npm --prefix frontend run build",
-    "gui":              "electron .",
-    "build:exe":        "electron-builder --win --publish never",
-    "build:mac":        "electron-builder --mac --publish never",
-    "build:linux":      "electron-builder --linux --publish never",
-    "build:all":        "electron-builder --win --mac --linux --publish never"
+    "start": "node bin/iterforge.js",
+    "test": "node test/runner.js",
+    "app": "node launcher.js",
+    "dev:server": "node src/server/dev-server.js",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "gui": "electron .",
+    "build:exe": "npm run build:frontend && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never",
+    "build:mac": "npm run build:frontend && electron-builder --mac --publish never",
+    "build:linux": "npm run build:frontend && electron-builder --linux --publish never",
+    "build:all": "npm run build:frontend && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --mac --linux --publish never"
   },
   "build": {
     "appId": "com.iterforge.app",
@@ -26,9 +27,13 @@
       "output": "dist"
     },
     "files": [
+      "electron-main.js",
       "bin/**",
       "src/**",
       "comfyui-workflows/**",
+      "frontend/dist/**",
+      "assets/icon.ico",
+      "assets/icon.png",
       "package.json"
     ],
     "win": {
@@ -77,8 +82,10 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "shortcutName": "IterForge"
     }
   },
   "dependencies": {
@@ -96,6 +103,7 @@
     "sharp": "0.33.3"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "electron": "30.0.9",
     "electron-builder": "24.13.3"
   },
