@@ -15,7 +15,8 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build",
     "gui": "electron .",
-    "build:exe": "npm run build:frontend && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never",
+    "fix-wincache": "node scripts/fix-wincosesign-cache.mjs",
+    "build:exe": "npm run fix-wincache && npm run build:frontend && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never",
     "build:mac": "npm run build:frontend && electron-builder --mac --publish never",
     "build:linux": "npm run build:frontend && electron-builder --linux --publish never",
     "build:all": "npm run build:frontend && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --mac --linux --publish never"
@@ -45,7 +46,9 @@
           ]
         }
       ],
-      "artifactName": "IterForge-Setup-${version}.exe"
+      "artifactName": "IterForge-Setup-${version}.exe",
+      "signingHashAlgorithms": [],
+      "sign": null
     },
     "mac": {
       "target": [
