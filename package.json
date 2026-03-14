@@ -1,0 +1,32 @@
+{
+  "name": "iterforge",
+  "version": "1.0.0",
+  "description": "IterForge - Game Asset Generation Pipeline Orchestrator",
+  "main": "src/index.js",
+  "bin": {
+    "iterforge": "bin/iterforge.js"
+  },
+  "scripts": {
+    "start": "node bin/iterforge.js",
+    "test": "node test/runner.js",
+    "gui": "electron ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.0.4",
+    "commander": "^12.0.0",
+    "chalk": "^5.0.0",
+    "ora": "^8.0.0",
+    "sharp": "0.33.3",
+    "node-fetch": "3.3.2",
+    "fs-extra": "^11.2.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "electron": "30.0.9",
+    "electron-builder": "24.13.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "module"
+}

@@ -1,0 +1,43 @@
+[gd_scene load_steps=2 format=3 uid="uid://iterforge_dock"]
+
+[ext_resource type="Script" path="res://addons/iterforge/iterforge_client.gd" id="1"]
+
+[node name="IterForgeDock" type="VBoxContainer"]
+script = ExtResource("1")
+custom_minimum_size = Vector2(200, 0)
+status_dot = NodePath("StatusRow/StatusDot")
+status_label = NodePath("StatusRow/StatusLabel")
+cloud_label = NodePath("CloudLabel")
+recent_list = NodePath("RecentList")
+open_gui_btn = NodePath("OpenGUIBtn")
+sync_btn = NodePath("SyncBtn")
+open_docs_btn = NodePath("OpenDocsBtn")
+
+[node name="StatusRow" type="HBoxContainer" parent="."]
+[node name="StatusDot" type="ColorRect" parent="StatusRow"]
+custom_minimum_size = Vector2(10, 10)
+color = Color(0.5, 0.5, 0.5, 1)
+[node name="StatusLabel" type="Label" parent="StatusRow"]
+text = "IterForge Not Found"
+auto_translate_mode = 2
+
+[node name="Separator1" type="HSeparator" parent="."]
+
+[node name="CloudLabel" type="Label" parent="."]
+text = ""
+auto_translate_mode = 2
+
+[node name="RecentHeader" type="Label" parent="."]
+text = "Recent Imports"
+auto_translate_mode = 2
+
+[node name="RecentList" type="VBoxContainer" parent="."]
+
+[node name="Separator2" type="HSeparator" parent="."]
+
+[node name="OpenGUIBtn" type="Button" parent="."]
+text = "Open GUI"
+[node name="SyncBtn" type="Button" parent="."]
+text = "Sync Now"
+[node name="OpenDocsBtn" type="Button" parent="."]
+text = "Open Docs"
