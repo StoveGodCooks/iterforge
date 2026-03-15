@@ -46,7 +46,7 @@
           ]
         }
       ],
-      "artifactName": "IterForge-Setup-${version}.exe",
+      "artifactName": "InterForge-Setup-${version}.exe",
       "signingHashAlgorithms": [],
       "sign": null
     },
@@ -60,7 +60,7 @@
           ]
         }
       ],
-      "artifactName": "IterForge-${version}.dmg",
+      "artifactName": "InterForge-${version}.dmg",
       "category": "public.app-category.graphics-design"
     },
     "linux": {
@@ -78,7 +78,7 @@
           ]
         }
       ],
-      "artifactName": "IterForge-${version}.AppImage",
+      "artifactName": "InterForge-${version}.AppImage",
       "category": "Graphics"
     },
     "nsis": {
