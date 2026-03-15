@@ -176,14 +176,16 @@ export class EnvManager {
     await fs.ensureDir(checkpointsDir);
 
     const files = await fs.readdir(checkpointsDir);
-    const hasSafetensors = files.some(f => f.endsWith('.safetensors') || f.endsWith('.ckpt'));
-    if (hasSafetensors) return;
+    const hasModel = files.some(f => f.endsWith('.safetensors') || f.endsWith('.ckpt'));
+    if (hasModel) return;
 
-    const MODEL_URL = 'https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors';
-    const modelDest = path.join(checkpointsDir, 'sd_xl_base_1.0.safetensors');
-    const tmpDest   = modelDest + '.tmp';
+    // DreamShaper XL — better stylized/game art output than SDXL base
+    const MODEL_URL  = 'https://huggingface.co/Lykon/dreamshaper-xl-1-0/resolve/main/DreamShaperXL10_alpha2.safetensors';
+    const MODEL_NAME = 'dreamshaper_xl_10.safetensors';
+    const modelDest  = path.join(checkpointsDir, MODEL_NAME);
+    const tmpDest    = modelDest + '.tmp';
 
-    spinner.text = 'Downloading SDXL 1.0 base model (~6.9 GB, one-time)...';
+    spinner.text = 'Downloading DreamShaper XL (~6.9 GB, one-time)...';
 
     const res = await fetch(MODEL_URL, { redirect: 'follow' });
     if (!res.ok) throw new Error(`Model download failed: ${res.status} ${res.statusText}`);
@@ -197,7 +199,7 @@ export class EnvManager {
         received += chunk.length;
         if (total) {
           const pct = ((received / total) * 100).toFixed(1);
-          spinner.text = `Downloading SDXL 1.0 base model... ${pct}%`;
+          spinner.text = `Downloading DreamShaper XL... ${pct}%`;
         }
       });
       res.body.pipe(out);
@@ -207,7 +209,7 @@ export class EnvManager {
     });
 
     await fs.rename(tmpDest, modelDest);
-    spinner.text = 'SDXL model ready.';
+    spinner.text = 'DreamShaper XL ready.';
   }
 
   // Returns true only if torch is installed AND CUDA is available
