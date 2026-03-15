@@ -1,7 +1,7 @@
 {
   "name": "iterforge",
   "version": "1.0.0",
-  "description": "IterForge - Game Asset Generation Pipeline Orchestrator",
+  "description": "InterForge - Game Asset Generation Pipeline Orchestrator",
   "author": "StoveGodCooks",
   "main": "electron-main.js",
   "bin": {
@@ -23,7 +23,7 @@
   },
   "build": {
     "appId": "com.iterforge.app",
-    "productName": "IterForge",
+    "productName": "InterForge",
     "directories": {
       "output": "dist"
     },
@@ -88,7 +88,7 @@
       "uninstallerIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "IterForge"
+      "shortcutName": "InterForge"
     }
   },
   "dependencies": {

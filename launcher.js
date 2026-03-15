@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * IterForge Desktop Launcher
+ * InterForge Desktop Launcher
  * Starts the Express server, ensures ComfyUI is running, opens the browser.
  * Usage: node launcher.js  OR  npm run app
  */
@@ -23,7 +23,7 @@ function openBrowser(url) {
 }
 
 async function main() {
-  console.log('\n  IterForge  🎨\n');
+  console.log('\n  InterForge  🎨\n');
 
   // 1. Start Express — server.listen keeps the process alive
   console.log('  Starting server…');
@@ -49,7 +49,7 @@ async function main() {
   server.ref();
 
   process.on('SIGINT', () => {
-    console.log('\n  Shutting down IterForge…');
+    console.log('\n  Shutting down InterForge…');
     server.close();
     process.exit(0);
   });

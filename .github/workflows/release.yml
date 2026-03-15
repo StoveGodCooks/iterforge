@@ -54,7 +54,7 @@ jobs:
       - name: Upload Windows installer
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/IterForge-Setup-*.exe
+          files: dist/InterForge-Setup-*.exe
           generate_release_notes: true
 
   # ── Build macOS installer (.pkg / .dmg) ──────────────────────────────────────
@@ -73,7 +73,7 @@ jobs:
       - name: Upload macOS installer
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/IterForge-*.dmg
+          files: dist/InterForge-*.dmg
           generate_release_notes: false
 
   # ── Build Linux installer (.deb + AppImage) ───────────────────────────────────
@@ -95,6 +95,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/IterForge-*.AppImage
+            dist/InterForge-*.AppImage
             dist/iterforge_*.deb
           generate_release_notes: false
