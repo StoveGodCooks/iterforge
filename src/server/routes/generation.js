@@ -4,7 +4,6 @@ import fs from 'fs-extra';
 import multer from 'multer';
 import { ITERFORGE_HOME } from '../../env/reader.js';
 import { generate as routerGenerate } from '../../backends/router.js';
-import { PromptEngine } from '../../prompts/engine.js';
 import { readHistory, HISTORY_FILE, ASSETS_DIR } from './history.js';
 
 const router = express.Router();
@@ -23,35 +22,53 @@ const DEFAULT_NEGATIVE =
 router.post('/', upload.single('refImage'), async (req, res) => {
   try {
     const {
-      mode          = 'custom',    // 'custom' | 'preset' | 'template'
-      prompt        = '',
+      mode           = 'custom',
+      prompt         = '',
       negativePrompt = DEFAULT_NEGATIVE,
-      faction       = 'AEGIS',
-      atmosphere    = 'midday',
-      condition     = 'standard',
-      type          = 'custom',    // arena | card | custom
-      model         = null,
-      seed          = null,
-      steps         = 30,
-      cfg           = 7,
-      sampler       = null,
-      width         = 1024,
-      height        = 1024,
-      strength      = 0.75,
+      assetType      = 'character',
+      artStyle       = 'stylized',
+      subject        = '',
+      type           = 'custom',
+      model          = null,
+      seed           = null,
+      steps          = 30,
+      cfg            = 7,
+      sampler        = null,
+      width          = 1024,
+      height         = 1024,
+      strength       = 0.75,
     } = req.body;
 
     // Build prompts
     let positive, negative;
     if (mode === 'preset') {
-      const built = PromptEngine.build({
-        type,
-        faction,
-        atmosphere,
-        condition,
-        zoom: 2, darkness: 3, noise: 1,
-      });
-      positive = built.positive;
-      negative = built.negative;
+      const styleMap = {
+        stylized:  'stylized art, vibrant colors, game art style',
+        realistic: 'photorealistic, highly detailed, cinematic lighting',
+        pixel:     'pixel art, 16-bit, retro game sprite',
+        painted:   'hand painted, watercolor texture, concept art',
+        lowpoly:   'low poly, geometric, flat shading',
+        anime:     'anime style, cel shaded, clean line art',
+      };
+      const typeMap = {
+        character:   'character, full body',
+        environment: 'environment, background, landscape',
+        prop:        'game prop, item, object, isolated',
+        creature:    'creature, monster, fantasy beast',
+        vehicle:     'vehicle, machine, mech',
+        ui:          'UI element, icon, HUD, interface',
+        texture:     'seamless texture, tileable, material',
+        concept:     'concept art, splash art, illustration',
+      };
+      const parts = [
+        'game asset',
+        subject.trim() || null,
+        typeMap[assetType] || assetType,
+        styleMap[artStyle] || artStyle,
+        'high quality, professional, detailed',
+      ].filter(Boolean);
+      positive = parts.join(', ');
+      negative = DEFAULT_NEGATIVE;
     } else {
       if (!prompt.trim()) {
         return res.status(400).json({ error: 'prompt is required for custom mode' });

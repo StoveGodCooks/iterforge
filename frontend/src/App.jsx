@@ -65,9 +65,11 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Top bar */}
-      <header className="flex items-center gap-3 px-5 py-3 bg-surface-800 border-b border-surface-600 shrink-0">
-        <span className="text-brand-400 font-bold text-lg tracking-wide">InterForge</span>
-        <span className="text-slate-500 text-xs">v1.0</span>
+      <header className="flex items-center gap-3 px-5 py-2.5 bg-surface-800 border-b border-surface-700/60 shrink-0">
+        <div className="flex items-baseline gap-2">
+          <span className="text-brand-400 font-bold text-base tracking-wider">InterForge</span>
+          <span className="text-slate-600 text-[11px] font-mono">v1.0</span>
+        </div>
         <div className="ml-auto">
           <StatusBar status={status} onStartComfy={handleStartComfy} onSetup={handleSetup} />
         </div>
@@ -76,7 +78,7 @@ export default function App() {
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar — controls */}
-        <aside className="w-80 shrink-0 bg-surface-800 border-r border-surface-600 overflow-y-auto">
+        <aside className="w-80 shrink-0 bg-surface-800 border-r border-surface-700/60 flex flex-col">
           <GenerationPanel onGenerated={onGenerated} />
         </aside>
 
