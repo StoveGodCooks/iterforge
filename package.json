@@ -10,7 +10,6 @@
   "scripts": {
     "start": "node bin/iterforge.js",
     "test": "node test/runner.js",
-    "app": "node launcher.js",
     "dev:server": "node src/server/dev-server.js",
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build",
