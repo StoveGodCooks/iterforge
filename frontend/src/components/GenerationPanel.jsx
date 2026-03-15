@@ -41,9 +41,9 @@ export default function GenerationPanel({ onGenerated }) {
   const [model,       setModel]       = useState('');
   const [models,      setModels]      = useState([]);
   const [seed,        setSeed]        = useState('');
-  const [steps,       setSteps]       = useState(30);
-  const [cfg,         setCfg]         = useState(7);
-  const [sampler,     setSampler]     = useState('dpmpp_2m_sde');
+  const [steps,       setSteps]       = useState(6);
+  const [cfg,         setCfg]         = useState(2);
+  const [sampler,     setSampler]     = useState('euler');
   const [resolution,  setResolution]  = useState(2);
   const [refImage,    setRefImage]    = useState(null);
   const [refPreview,  setRefPreview]  = useState(null);

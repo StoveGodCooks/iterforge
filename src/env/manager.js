@@ -179,13 +179,13 @@ export class EnvManager {
     const hasModel = files.some(f => f.endsWith('.safetensors') || f.endsWith('.ckpt'));
     if (hasModel) return;
 
-    // DreamShaper XL — better stylized/game art output than SDXL base
-    const MODEL_URL  = 'https://huggingface.co/Lykon/dreamshaper-xl-1-0/resolve/main/DreamShaperXL10_alpha2.safetensors';
-    const MODEL_NAME = 'dreamshaper_xl_10.safetensors';
+    // DreamShaper XL Lightning — stylized game art, fast (4-8 steps)
+    const MODEL_URL  = 'https://huggingface.co/Lykon/dreamshaper-xl-lightning/resolve/main/DreamShaperXL_Lightning.safetensors';
+    const MODEL_NAME = 'dreamshaper_xl_lightning.safetensors';
     const modelDest  = path.join(checkpointsDir, MODEL_NAME);
     const tmpDest    = modelDest + '.tmp';
 
-    spinner.text = 'Downloading DreamShaper XL (~6.9 GB, one-time)...';
+    spinner.text = 'Downloading DreamShaper XL Lightning (~6.9 GB, one-time)...';
 
     const res = await fetch(MODEL_URL, { redirect: 'follow' });
     if (!res.ok) throw new Error(`Model download failed: ${res.status} ${res.statusText}`);
@@ -199,7 +199,7 @@ export class EnvManager {
         received += chunk.length;
         if (total) {
           const pct = ((received / total) * 100).toFixed(1);
-          spinner.text = `Downloading DreamShaper XL... ${pct}%`;
+          spinner.text = `Downloading DreamShaper XL Lightning... ${pct}%`;
         }
       });
       res.body.pipe(out);
