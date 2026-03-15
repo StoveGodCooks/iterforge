@@ -61,14 +61,25 @@ async function downloadPython(spinner) {
 }
 
 export class EnvManager {
-  static async setup() {
+  static async setup({ onProgress } = {}) {
     await fs.ensureDir(ITERFORGE_HOME);
     const spinner = ora('Checking managed environment...').start();
+
+    // Mirror spinner text to optional progress callback (used by web UI)
+    const _orig = Object.getOwnPropertyDescriptor(spinner, 'text') ??
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(spinner), 'text');
+    let _text = '';
+    Object.defineProperty(spinner, 'text', {
+      get: () => _text,
+      set: (v) => { _text = v; if (onProgress) onProgress(v); },
+      configurable: true,
+    });
 
     try {
       const pythonExe = await this.ensurePython(spinner);
       await this.ensureComfyUI(spinner, pythonExe);
       spinner.succeed('Managed environment ready.');
+      if (onProgress) onProgress('done');
     } catch (err) {
       spinner.fail(`Setup failed: ${err.message}`);
       throw err;
@@ -79,16 +90,17 @@ export class EnvManager {
   static async ensurePython(spinner) {
     const basePython = await downloadPython(spinner);
 
-    // Always patch the ._pth file — runs even when python-base already exists.
-    // Embeddable Python suppresses PYTHONPATH; this is the only way to add paths.
+    // Always ensure the ._pth file exists and is correct.
+    // Embeddable Python suppresses PYTHONPATH; this file is the only way to add paths.
+    // Create it from scratch if missing (e.g. manual Python extraction).
     const pthFile = path.join(BASE_DIR, 'python311._pth');
-    if (await fs.pathExists(pthFile)) {
-      let pth = await fs.readFile(pthFile, 'utf8');
-      let changed = false;
-      if (pth.includes('#import site')) { pth = pth.replace('#import site', 'import site'); changed = true; }
-      if (!pth.includes(COMFYUI_DIR))   { pth += `\n${COMFYUI_DIR}\n`; changed = true; }
-      if (changed) await fs.writeFile(pthFile, pth);
-    }
+    let pth = (await fs.pathExists(pthFile))
+      ? await fs.readFile(pthFile, 'utf8')
+      : 'python311.zip\n.\n#import site\n';
+    let changed = false;
+    if (pth.includes('#import site')) { pth = pth.replace('#import site', 'import site'); changed = true; }
+    if (!pth.includes(COMFYUI_DIR))   { pth += `\n${COMFYUI_DIR}\n`; changed = true; }
+    if (changed || !(await fs.pathExists(pthFile))) await fs.writeFile(pthFile, pth);
 
     // Embeddable Python ships without pip — bootstrap it with get-pip.py
     const basePip = path.join(BASE_DIR, 'Scripts', 'pip.exe');

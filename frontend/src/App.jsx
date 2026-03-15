@@ -44,8 +44,15 @@ export default function App() {
   async function handleStartComfy() {
     try {
       await fetch('/api/comfyui/start', { method: 'POST' });
-      // Optimistically mark as starting and poll fast
       setStatus(s => ({ ...s, comfyStarting: true }));
+      startPolling(2000);
+    } catch {}
+  }
+
+  async function handleSetup() {
+    try {
+      await fetch('/api/setup/install', { method: 'POST' });
+      setStatus(s => ({ ...s, setup: { state: 'running', message: 'Starting setup…' } }));
       startPolling(2000);
     } catch {}
   }
@@ -62,7 +69,7 @@ export default function App() {
         <span className="text-brand-400 font-bold text-lg tracking-wide">InterForge</span>
         <span className="text-slate-500 text-xs">v1.0</span>
         <div className="ml-auto">
-          <StatusBar status={status} onStartComfy={handleStartComfy} />
+          <StatusBar status={status} onStartComfy={handleStartComfy} onSetup={handleSetup} />
         </div>
       </header>
 

@@ -1,10 +1,17 @@
-export default function StatusBar({ status, onStartComfy }) {
+export default function StatusBar({ status, onStartComfy, onSetup }) {
   const comfyOk        = status.comfyui === 'ok';
   const comfyStarting  = status.comfyStarting;
   const comfyInstalled = status.comfyInstalled;
+  const setup          = status.setup ?? { state: 'idle' };
 
-  const dot = (ok) => (
-    <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${ok ? 'bg-green-400' : 'bg-red-400'}`} />
+  const dot = (ok, color) => (
+    <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${color ?? (ok ? 'bg-green-400' : 'bg-red-400')}`} />
+  );
+
+  const Spinner = () => (
+    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="40 20" />
+    </svg>
   );
 
   function ComfyStatus() {
@@ -14,24 +21,47 @@ export default function StatusBar({ status, onStartComfy }) {
     if (comfyStarting) {
       return (
         <span className="flex items-center gap-1.5 text-yellow-400">
-          <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="40 20" />
-          </svg>
-          ComfyUI starting…
+          <Spinner />ComfyUI starting…
         </span>
       );
     }
-    if (comfyInstalled === false) {
-      // ComfyUI not installed — no point showing Start
+    // Setup running
+    if (setup.state === 'running') {
       return (
-        <span className="flex items-center gap-1.5 text-slate-500">
-          <span className="inline-block w-2 h-2 rounded-full mr-1.5 bg-slate-600" />
-          ComfyUI
-          <span className="text-[10px] text-slate-600">(not installed)</span>
+        <span className="flex items-center gap-1.5 text-yellow-400">
+          <Spinner />
+          <span className="max-w-[200px] truncate" title={setup.message}>
+            {setup.message || 'Setting up…'}
+          </span>
         </span>
       );
     }
-    // Installed but not running — show Start button
+    // Setup error
+    if (setup.state === 'error') {
+      return (
+        <span className="flex items-center gap-1.5 text-red-400" title={setup.error}>
+          {dot(false)}Setup failed
+          <button onClick={onSetup} className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-red-800 hover:bg-red-700 text-white transition-colors">
+            Retry
+          </button>
+        </span>
+      );
+    }
+    // Not installed
+    if (comfyInstalled === false) {
+      return (
+        <span className="flex items-center gap-1.5">
+          {dot(false, 'bg-slate-500')}ComfyUI
+          <button
+            onClick={onSetup}
+            className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-brand-600 hover:bg-brand-500 text-white transition-colors"
+          >
+            Setup
+          </button>
+        </span>
+      );
+    }
+    // Installed but stopped
     return (
       <span className="flex items-center gap-1.5">
         {dot(false)}ComfyUI

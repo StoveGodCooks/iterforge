@@ -54,17 +54,30 @@ const LOADING_HTML = `data:text/html,
 // ── Start Express + ComfyUI ─────────────────────────────────────────────────
 async function startBackend() {
   const { startServer }                        = await import('./src/server/app.js');
-  const { isPortOpen, startComfyUIBackground } = await import('./src/server/comfyui-manager.js');
+  const { isPortOpen, startComfyUIBackground, isComfyInstalled } = await import('./src/server/comfyui-manager.js');
+  const { EnvManager }                         = await import('./src/env/manager.js');
 
   const { server, port } = await startServer(3000);
   server.ref(); // keep process alive
 
-  // Always attempt to start ComfyUI in the background on launch.
-  // startComfyUIBackground() returns immediately (detached process) and sets
-  // the isComfyStarting() flag, which the frontend status bar polls for.
   const comfyUp = await isPortOpen('127.0.0.1', 8188);
-  if (!comfyUp) {
-    startComfyUIBackground(); // intentionally not awaited — runs in background
+  if (comfyUp) return port;
+
+  const installed = await isComfyInstalled();
+  if (!installed) {
+    // First-run: trigger full setup in background — frontend shows progress via /api/setup
+    console.log('[InterForge] First run — starting environment setup in background…');
+    ;(async () => {
+      try {
+        await EnvManager.setup();
+        startComfyUIBackground();
+      } catch (err) {
+        console.error('[InterForge] Setup error:', err.message);
+      }
+    })();
+  } else {
+    // Installed but not running — start it
+    startComfyUIBackground();
   }
 
   return port;
