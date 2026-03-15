@@ -1,5 +1,6 @@
 import express from 'express';
 import { EnvManager } from '../../env/manager.js';
+import { startComfyUIBackground } from '../comfyui-manager.js';
 
 const router = express.Router();
 
@@ -10,38 +11,35 @@ let _setupError = '';
 
 export const getSetupState = () => ({ state: _setupState, message: _setupMessage, error: _setupError });
 
-// GET /api/setup — current install state
-router.get('/', (_req, res) => {
-  res.json(getSetupState());
-});
-
-// POST /api/setup/install — trigger full environment setup (Python + ComfyUI + deps)
-router.post('/install', async (_req, res) => {
-  if (_setupState === 'running') {
-    return res.json({ state: 'running', message: _setupMessage });
-  }
-
+// Shared setup runner — used by both the HTTP route and electron-main.js
+export function triggerSetup() {
+  if (_setupState === 'running') return;
   _setupState   = 'running';
   _setupMessage = 'Starting setup…';
   _setupError   = '';
-  res.json({ state: 'running', message: _setupMessage });
-
-  // Run in background — frontend polls GET /api/setup for progress
   ;(async () => {
     try {
-      // Monkey-patch ora so spinner.text updates our message
-      const origSetup = EnvManager.setup.bind(EnvManager);
-      await origSetup({
-        onProgress: (msg) => { _setupMessage = msg; },
-      });
+      await EnvManager.setup({ onProgress: (msg) => { _setupMessage = msg; } });
       _setupState   = 'done';
-      _setupMessage = 'Setup complete — restarting ComfyUI…';
+      _setupMessage = 'Setup complete — starting ComfyUI…';
+      startComfyUIBackground();
     } catch (err) {
       _setupState   = 'error';
       _setupError   = err.message;
       _setupMessage = '';
     }
   })();
+}
+
+// GET /api/setup — current install state
+router.get('/', (_req, res) => {
+  res.json(getSetupState());
+});
+
+// POST /api/setup/install — trigger full environment setup (Python + ComfyUI + deps)
+router.post('/install', (_req, res) => {
+  triggerSetup();
+  res.json(getSetupState());
 });
 
 export default router;

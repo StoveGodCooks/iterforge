@@ -53,9 +53,9 @@ const LOADING_HTML = `data:text/html,
 
 // ── Start Express + ComfyUI ─────────────────────────────────────────────────
 async function startBackend() {
-  const { startServer }                        = await import('./src/server/app.js');
-  const { isPortOpen, startComfyUIBackground, isComfyInstalled } = await import('./src/server/comfyui-manager.js');
-  const { EnvManager }                         = await import('./src/env/manager.js');
+  const { startServer }          = await import('./src/server/app.js');
+  const { isPortOpen, isComfyInstalled } = await import('./src/server/comfyui-manager.js');
+  const { triggerSetup }         = await import('./src/server/routes/setup.js');
 
   const { server, port } = await startServer(3000);
   server.ref(); // keep process alive
@@ -63,22 +63,12 @@ async function startBackend() {
   const comfyUp = await isPortOpen('127.0.0.1', 8188);
   if (comfyUp) return port;
 
+  // Always run the idempotent setup — it skips completed steps via marker files.
+  // On first run this installs Python + ComfyUI + torch + model (~10 GB total).
+  // On subsequent runs it verifies torch is present and starts ComfyUI.
   const installed = await isComfyInstalled();
-  if (!installed) {
-    // First-run: trigger full setup in background — frontend shows progress via /api/setup
-    console.log('[InterForge] First run — starting environment setup in background…');
-    ;(async () => {
-      try {
-        await EnvManager.setup();
-        startComfyUIBackground();
-      } catch (err) {
-        console.error('[InterForge] Setup error:', err.message);
-      }
-    })();
-  } else {
-    // Installed but not running — start it
-    startComfyUIBackground();
-  }
+  console.log(`[InterForge] ComfyUI installed: ${installed} — running setup check…`);
+  triggerSetup();
 
   return port;
 }
