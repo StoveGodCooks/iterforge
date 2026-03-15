@@ -19,7 +19,7 @@ export default function App() {
           setStatus(s);
           // Slow back down once ComfyUI is up or no longer starting
           if (intervalMs < 5000 && s.comfyui === 'ok') {
-            startPolling(5000);
+            startPolling(2000);
           }
         }
       } catch { setStatus(s => ({ ...s, server: 'error' })); }
@@ -29,7 +29,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    startPolling(5000);
+    startPolling(2000);
     return () => clearInterval(pollRef.current);
   }, []);
 
@@ -59,7 +59,7 @@ export default function App() {
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Top bar */}
       <header className="flex items-center gap-3 px-5 py-3 bg-surface-800 border-b border-surface-600 shrink-0">
-        <span className="text-brand-400 font-bold text-lg tracking-wide">IterForge</span>
+        <span className="text-brand-400 font-bold text-lg tracking-wide">InterForge</span>
         <span className="text-slate-500 text-xs">v1.0</span>
         <div className="ml-auto">
           <StatusBar status={status} onStartComfy={handleStartComfy} />

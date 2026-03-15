@@ -1,6 +1,7 @@
 export default function StatusBar({ status, onStartComfy }) {
-  const comfyOk       = status.comfyui === 'ok';
-  const comfyStarting = status.comfyStarting;
+  const comfyOk        = status.comfyui === 'ok';
+  const comfyStarting  = status.comfyStarting;
+  const comfyInstalled = status.comfyInstalled;
 
   const dot = (ok) => (
     <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${ok ? 'bg-green-400' : 'bg-red-400'}`} />
@@ -8,7 +9,7 @@ export default function StatusBar({ status, onStartComfy }) {
 
   function ComfyStatus() {
     if (comfyOk) {
-      return <span>{dot(true)}ComfyUI</span>;
+      return <span className="flex items-center text-green-400">{dot(true)}ComfyUI</span>;
     }
     if (comfyStarting) {
       return (
@@ -20,6 +21,17 @@ export default function StatusBar({ status, onStartComfy }) {
         </span>
       );
     }
+    if (comfyInstalled === false) {
+      // ComfyUI not installed — no point showing Start
+      return (
+        <span className="flex items-center gap-1.5 text-slate-500">
+          <span className="inline-block w-2 h-2 rounded-full mr-1.5 bg-slate-600" />
+          ComfyUI
+          <span className="text-[10px] text-slate-600">(not installed)</span>
+        </span>
+      );
+    }
+    // Installed but not running — show Start button
     return (
       <span className="flex items-center gap-1.5">
         {dot(false)}ComfyUI

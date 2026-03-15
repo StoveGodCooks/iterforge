@@ -10,9 +10,16 @@ const COMFYUI_HOST = '127.0.0.1';
 const COMFYUI_PORT = 8188;
 const PIDS_FILE    = path.join(ITERFORGE_HOME, 'pids.json');
 
-// Shared flag — lets the status API report "starting" while ComfyUI boots
-let _comfyStarting = false;
+// Shared flags — let the status API report current ComfyUI state
+let _comfyStarting  = false;
 export const isComfyStarting = () => _comfyStarting;
+
+export async function isComfyInstalled() {
+  const env      = await readEnv();
+  const fallback = path.join(ITERFORGE_HOME, 'comfyui');
+  const comfyDir = env.tools?.comfyui?.path ?? fallback;
+  return fs.pathExists(path.join(comfyDir, 'main.py'));
+}
 
 export function isPortOpen(host, port, timeoutMs = 1500) {
   return new Promise((resolve) => {

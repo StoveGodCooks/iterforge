@@ -1,5 +1,5 @@
 /**
- * IterForge Electron entry point
+ * InterForge Electron entry point
  * Starts the Express server (localhost) then renders the UI in a BrowserWindow.
  * Users double-click the .exe — no CLI or Node.js installation required.
  */
@@ -13,16 +13,59 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow = null;
 let serverPort  = null;
 
-// ── Start Express + ComfyUI check ──────────────────────────────────────────
+// Inline loading page shown while Express + ComfyUI spin up
+const LOADING_HTML = `data:text/html,
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: #0f1117;
+    color: #94a3b8;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    gap: 16px;
+  }
+  .logo { color: #818cf8; font-size: 24px; font-weight: 700; letter-spacing: .05em; }
+  .msg  { font-size: 13px; opacity: .6; }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid #1e293b;
+    border-top-color: #818cf8;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="logo">InterForge</div>
+  <div class="spinner"></div>
+  <div class="msg">Starting server…</div>
+</body>
+</html>`;
+
+// ── Start Express + ComfyUI ─────────────────────────────────────────────────
 async function startBackend() {
-  const { startServer }               = await import('./src/server/app.js');
+  const { startServer }                        = await import('./src/server/app.js');
   const { isPortOpen, startComfyUIBackground } = await import('./src/server/comfyui-manager.js');
 
   const { server, port } = await startServer(3000);
   server.ref(); // keep process alive
 
+  // Always attempt to start ComfyUI in the background on launch.
+  // startComfyUIBackground() returns immediately (detached process) and sets
+  // the isComfyStarting() flag, which the frontend status bar polls for.
   const comfyUp = await isPortOpen('127.0.0.1', 8188);
-  if (!comfyUp) await startComfyUIBackground();
+  if (!comfyUp) {
+    startComfyUIBackground(); // intentionally not awaited — runs in background
+  }
 
   return port;
 }
@@ -34,7 +77,7 @@ function createWindow(port) {
   mainWindow = new BrowserWindow({
     width:  1280,
     height: 820,
-    title:  'IterForge',
+    title:  'InterForge',
     icon:   iconPath,
     webPreferences: {
       nodeIntegration:  false,
@@ -42,27 +85,36 @@ function createWindow(port) {
     },
   });
 
-  // Remove default menu bar
   mainWindow.setMenuBarVisibility(false);
 
-  mainWindow.loadURL(`http://127.0.0.1:${port}`);
+  // Show loading page immediately, then swap to the app once Express is ready
+  mainWindow.loadURL(LOADING_HTML);
+
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 // ── App lifecycle ───────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+  // Open the window first so the user sees the loading screen immediately
+  createWindow();
+
   try {
     serverPort = await startBackend();
-    createWindow(serverPort);
+    // Now swap the loading page for the real app
+    if (mainWindow) mainWindow.loadURL(`http://127.0.0.1:${serverPort}`);
   } catch (err) {
-    console.error('IterForge startup error:', err);
-    app.quit();
+    console.error('InterForge startup error:', err);
+    if (mainWindow) {
+      mainWindow.loadURL(`data:text/html,<body style="background:#0f1117;color:#f87171;font-family:sans-serif;padding:40px">
+        <h2>Startup error</h2><pre style="margin-top:12px;font-size:12px">${err.message}</pre>
+      </body>`);
+    }
   }
 
   app.on('activate', () => {
-    // macOS: re-open window when dock icon is clicked
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(serverPort);
+      createWindow();
+      if (serverPort && mainWindow) mainWindow.loadURL(`http://127.0.0.1:${serverPort}`);
     }
   });
 });

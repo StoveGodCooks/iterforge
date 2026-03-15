@@ -1,21 +1,23 @@
 import express from 'express';
 import { healthCheck } from '../../backends/comfyui.js';
 import { readEnv } from '../../env/reader.js';
-import { isComfyStarting } from '../comfyui-manager.js';
+import { isComfyStarting, isComfyInstalled } from '../comfyui-manager.js';
 
 const router = express.Router();
 
 router.get('/', async (_req, res) => {
   try {
-    const [comfyHealth, env] = await Promise.all([
+    const [comfyHealth, env, comfyInstalled] = await Promise.all([
       healthCheck(),
       readEnv(),
+      isComfyInstalled(),
     ]);
 
     res.json({
       server:        'ok',
       comfyui:       comfyHealth.ok ? 'ok' : 'error',
       comfyStarting: isComfyStarting(),
+      comfyInstalled,
       tier:          env.tier ?? 'free',
       version:       '1.0.0',
     });
