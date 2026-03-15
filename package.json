@@ -16,7 +16,8 @@
     "build:frontend": "npm --prefix frontend run build",
     "gui": "electron .",
     "fix-wincache": "node scripts/fix-wincosesign-cache.mjs",
-    "build:exe": "npm run fix-wincache && npm run build:frontend && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build:exe": "npm run clean && npm run fix-wincache && npm run build:frontend && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never",
     "build:mac": "npm run build:frontend && electron-builder --mac --publish never",
     "build:linux": "npm run build:frontend && electron-builder --linux --publish never",
     "build:all": "npm run build:frontend && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --mac --linux --publish never"
