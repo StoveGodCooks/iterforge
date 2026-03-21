@@ -7,5 +7,5 @@ import { startServer } from './app.js';
 
 const PORT = 3000;
 const { port } = await startServer(PORT);
-console.log(`IterForge API server running on http://127.0.0.1:${port}`);
+console.log(`Inter-Forge API server running on http://127.0.0.1:${port}`);
 console.log('Run `npm run dev:frontend` in another terminal for the Vite dev server.');

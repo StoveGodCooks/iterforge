@@ -33,7 +33,7 @@ async function stopBackend(name) {
   const pid = pids[name];
 
   if (!pid) {
-    console.log(chalk.yellow(`! No tracked PID for ${name}. It may have been started outside IterForge.`));
+    console.log(chalk.yellow(`! No tracked PID for ${name}. It may have been started outside Inter-Forge.`));
     return;
   }
 

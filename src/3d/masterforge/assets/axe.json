@@ -1,0 +1,34 @@
+{
+  "type": "axe",
+  "n_slices": 300,
+  "min_depth": 0.025,
+  "min_width": 0.005,
+  "zones": {
+    "blade": {
+      "cross_section": "lenticular",
+      "depth_ratio": 0.10
+    },
+    "tip": {
+      "width_threshold": 0.06,
+      "cross_section": "lenticular",
+      "depth_ratio": 0.45
+    },
+    "guard": {
+      "band": [0.55, 0.95],
+      "threshold": 0.60,
+      "relative_threshold": 0.68,
+      "cross_section": "flat",
+      "depth_ratio": 0.18
+    },
+    "handle": {
+      "cross_section": "octagon",
+      "depth_ratio": 0.28
+    },
+    "pommel": {
+      "max_band": 0.12,
+      "handle_multiplier": 1.3,
+      "cross_section": "octagon",
+      "depth_ratio": 0.40
+    }
+  }
+}

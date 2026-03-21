@@ -4,13 +4,22 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
-import generationRoutes from './routes/generation.js';
-import statusRoutes    from './routes/status.js';
-import historyRoutes   from './routes/history.js';
-import modelsRoutes    from './routes/models.js';
-import templatesRoutes from './routes/templates.js';
-import comfyuiRoutes   from './routes/comfyui.js';
-import setupRoutes     from './routes/setup.js';
+import generationRoutes  from './routes/generation.js';
+import statusRoutes      from './routes/status.js';
+import historyRoutes     from './routes/history.js';
+import modelsRoutes      from './routes/models.js';
+import templatesRoutes   from './routes/templates.js';
+import comfyuiRoutes     from './routes/comfyui.js';
+import setupRoutes       from './routes/setup.js';
+import spriteSheetRoutes from './routes/sprite-sheet.js';
+import blenderRoutes      from './routes/blender.js';
+import masterforgeRoutes  from './routes/masterforge.js';
+import diagnosticsRoutes  from './routes/diagnostics.js';
+import inkscapeRoutes    from './routes/inkscape.js';
+import mcpRoutes         from './routes/mcp.js';
+import exportRoutes      from './routes/export.js';
+import triposrRoutes     from './routes/triposr.js';
+import settingsRoutes    from './routes/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -23,13 +32,22 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // ── API routes ────────────────────────────────────────────────────────────
-  app.use('/api/generate',  generationRoutes);
-  app.use('/api/status',    statusRoutes);
-  app.use('/api/history',   historyRoutes);
-  app.use('/api/models',    modelsRoutes);
-  app.use('/api/templates', templatesRoutes);
-  app.use('/api/comfyui',   comfyuiRoutes);
-  app.use('/api/setup',     setupRoutes);
+  app.use('/api/generate',      generationRoutes);
+  app.use('/api/sprite-sheet',  spriteSheetRoutes);
+  app.use('/api/status',        statusRoutes);
+  app.use('/api/history',       historyRoutes);
+  app.use('/api/models',        modelsRoutes);
+  app.use('/api/templates',     templatesRoutes);
+  app.use('/api/comfyui',       comfyuiRoutes);
+  app.use('/api/setup',         setupRoutes);
+  app.use('/api/blender',       blenderRoutes);
+  app.use('/api/masterforge',   masterforgeRoutes);
+  app.use('/api/diagnostics',   diagnosticsRoutes);
+  app.use('/api/inkscape',      inkscapeRoutes);
+  app.use('/mcp',               mcpRoutes);
+  app.use('/api/export',        exportRoutes);
+  app.use('/api/triposr',       triposrRoutes);
+  app.use('/api/settings',      settingsRoutes);
 
   // ── Serve built frontend (production) ────────────────────────────────────
   app.use(express.static(FRONTEND_DIST));

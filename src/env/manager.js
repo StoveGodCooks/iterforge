@@ -1,10 +1,15 @@
 import path from 'path';
 import fs from 'fs-extra';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import ora from 'ora';
 import fetch from 'node-fetch';
+import { fileURLToPath } from 'url';
 import { ITERFORGE_HOME } from './reader.js';
 import { registerTool } from './writer.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TRIPOSR_INFER_SCRIPT = path.join(__dirname, '..', '3d', 'inference', 'triposr_infer.py');
+const TRIPOSR_MARKER       = path.join(ITERFORGE_HOME, 'triposr.ok');
 
 // Install packages directly into python-base — no separate venv, no installer.
 // Uses the embeddable Python zip (no admin/MSI required).
@@ -12,6 +17,20 @@ const BASE_DIR    = path.join(ITERFORGE_HOME, 'python-base');
 const BASE_PYTHON = path.join(BASE_DIR, 'python.exe');
 const COMFYUI_DIR = path.join(ITERFORGE_HOME, 'comfyui');
 const COMFYUI_REPO = 'https://github.com/comfyanonymous/ComfyUI.git';
+
+// Blender 4.2 LTS — portable Windows x64 zip (no installer, no admin required).
+// Extracts to a versioned subfolder; we move it to BLENDER_DIR/blender.exe.
+const BLENDER_DIR     = path.join(ITERFORGE_HOME, 'blender');
+const BLENDER_EXE     = path.join(BLENDER_DIR, 'blender.exe');
+const BLENDER_VERSION = '4.2.3';
+const BLENDER_URL     = `https://download.blender.org/release/Blender4.2/blender-${BLENDER_VERSION}-windows-x64.zip`;
+
+// Inkscape 1.4.3 — Windows x64 NSIS installer, silent install to AppData.
+// /S = silent, /D= sets install dir (must be absolute, no trailing slash).
+const INKSCAPE_DIR     = path.join(ITERFORGE_HOME, 'inkscape');
+const INKSCAPE_EXE     = path.join(INKSCAPE_DIR, 'bin', 'inkscape.exe');
+const INKSCAPE_VERSION = '1.4.3';
+const INKSCAPE_URL     = `https://inkscape.org/release/inkscape-${INKSCAPE_VERSION}/windows/64-bit/exe/dl/`;
 
 // ── Download & extract embeddable Python 3.11.9 (no installer needed) ────────
 async function downloadPython(spinner) {
@@ -78,6 +97,9 @@ export class EnvManager {
     try {
       const pythonExe = await this.ensurePython(spinner);
       await this.ensureComfyUI(spinner, pythonExe);
+      await this.ensureBlender(spinner);
+      await this.ensureInkscape(spinner);
+      await this.ensureTripoSR(spinner, pythonExe);
       spinner.succeed('Managed environment ready.');
       if (onProgress) onProgress('done');
     } catch (err) {
@@ -210,6 +232,203 @@ export class EnvManager {
 
     await fs.rename(tmpDest, modelDest);
     spinner.text = 'DreamShaper XL ready.';
+  }
+
+  // ── Step 4: ensure Blender 4.2 LTS is installed ────────────────────────────
+  static async ensureBlender(spinner) {
+    // Already installed — skip
+    if (await fs.pathExists(BLENDER_EXE)) {
+      await registerTool('blender', { path: BLENDER_EXE, version: BLENDER_VERSION, managed: true });
+      return BLENDER_EXE;
+    }
+
+    // Download portable Blender zip
+    const zipDest    = path.join(ITERFORGE_HOME, 'blender.zip');
+    const tmpExtract = path.join(ITERFORGE_HOME, 'blender-tmp');
+
+    spinner.text = `Downloading Blender ${BLENDER_VERSION} LTS (~220 MB, one-time)...`;
+
+    const res = await fetch(BLENDER_URL, { redirect: 'follow' });
+    if (!res.ok) throw new Error(`Blender download failed: ${res.status} ${res.statusText}`);
+
+    const total = parseInt(res.headers.get('content-length') || '0', 10);
+    let received = 0;
+    const out = fs.createWriteStream(zipDest);
+
+    await new Promise((resolve, reject) => {
+      res.body.on('data', chunk => {
+        received += chunk.length;
+        if (total) {
+          const pct = ((received / total) * 100).toFixed(1);
+          spinner.text = `Downloading Blender ${BLENDER_VERSION}... ${pct}%`;
+        }
+      });
+      res.body.pipe(out);
+      res.body.on('error', reject);
+      out.on('finish', resolve);
+      out.on('error', reject);
+    });
+
+    // Extract zip — same PowerShell approach as Python
+    spinner.text = 'Extracting Blender (this takes ~30 seconds)...';
+    await fs.remove(tmpExtract);
+    await fs.ensureDir(tmpExtract);
+    execSync(
+      `powershell -NoProfile -Command "Expand-Archive -Path '${zipDest}' -DestinationPath '${tmpExtract}' -Force"`,
+      { stdio: 'ignore', timeout: 120_000 }
+    );
+    await fs.remove(zipDest);
+
+    // Zip extracts to a versioned subfolder: blender-4.2.3-windows-x64/blender.exe
+    // Move that subfolder to BLENDER_DIR so final path is BLENDER_DIR/blender.exe
+    const entries = await fs.readdir(tmpExtract);
+    const blenderSubdir = entries.find(e => e.toLowerCase().startsWith('blender'));
+    if (!blenderSubdir) throw new Error('Blender extraction failed — no blender directory found in zip');
+
+    await fs.remove(BLENDER_DIR);
+    await fs.move(path.join(tmpExtract, blenderSubdir), BLENDER_DIR);
+    await fs.remove(tmpExtract);
+
+    if (!(await fs.pathExists(BLENDER_EXE))) {
+      throw new Error('Blender installation failed — blender.exe not found after extraction');
+    }
+
+    spinner.text = `Blender ${BLENDER_VERSION} LTS ready.`;
+    await registerTool('blender', { path: BLENDER_EXE, version: BLENDER_VERSION, managed: true });
+    return BLENDER_EXE;
+  }
+
+  // ── Step 4: ensure Inkscape is installed ────────────────────────────────────
+  static async ensureInkscape(spinner) {
+    // Already in managed dir — done
+    if (await fs.pathExists(INKSCAPE_EXE)) {
+      await registerTool('inkscape', { path: INKSCAPE_EXE, version: INKSCAPE_VERSION, managed: true });
+      return INKSCAPE_EXE;
+    }
+
+    // Check common system install locations first — copy rather than re-download
+    const SYSTEM_INKSCAPE_CANDIDATES = [
+      'C:\\inkscape\\bin\\inkscape.exe',            // portable install at C:\inkscape
+      'C:\\Program Files\\Inkscape\\bin\\inkscape.exe',
+      'C:\\Program Files (x86)\\Inkscape\\bin\\inkscape.exe',
+    ];
+    let systemInkscapeDir = null;
+    for (const candidate of SYSTEM_INKSCAPE_CANDIDATES) {
+      if (await fs.pathExists(candidate)) {
+        systemInkscapeDir = path.dirname(path.dirname(candidate)); // bin/../ = root
+        break;
+      }
+    }
+
+    if (systemInkscapeDir) {
+      // Copy existing system installation into managed directory
+      spinner.text = `Copying Inkscape from ${systemInkscapeDir} (one-time)...`;
+      await fs.copy(systemInkscapeDir, INKSCAPE_DIR, { overwrite: true });
+    } else {
+      // No system install found — download the installer and run silently
+      const installerDest = path.join(ITERFORGE_HOME, 'inkscape-installer.exe');
+      spinner.text = `Downloading Inkscape ${INKSCAPE_VERSION} (~100 MB, one-time)...`;
+
+      const res = await fetch(INKSCAPE_URL, { redirect: 'follow' });
+      if (!res.ok) throw new Error(`Inkscape download failed: ${res.status} ${res.statusText}`);
+
+      const total = parseInt(res.headers.get('content-length') || '0', 10);
+      let received = 0;
+      const out = fs.createWriteStream(installerDest);
+
+      await new Promise((resolve, reject) => {
+        res.body.on('data', chunk => {
+          received += chunk.length;
+          if (total) {
+            const pct = ((received / total) * 100).toFixed(1);
+            spinner.text = `Downloading Inkscape ${INKSCAPE_VERSION}... ${pct}%`;
+          }
+        });
+        res.body.pipe(out);
+        res.body.on('error', reject);
+        out.on('finish', resolve);
+        out.on('error', reject);
+      });
+
+      // Silent NSIS install — /S silent, /D sets target dir (no quotes, no trailing slash)
+      spinner.text = 'Installing Inkscape (silent)...';
+      const winInstallDir = INKSCAPE_DIR.replace(/\//g, '\\');
+      execSync(`"${installerDest}" /S /D=${winInstallDir}`, {
+        stdio: 'ignore',
+        timeout: 300_000,
+      });
+      await fs.remove(installerDest).catch(() => {});
+    }
+
+    if (!(await fs.pathExists(INKSCAPE_EXE))) {
+      throw new Error('Inkscape setup failed — inkscape.exe not found after install');
+    }
+
+    spinner.text = `Inkscape ${INKSCAPE_VERSION} ready.`;
+    await registerTool('inkscape', { path: INKSCAPE_EXE, version: INKSCAPE_VERSION, managed: true });
+    return INKSCAPE_EXE;
+  }
+
+  // ── Step 5: download TripoSR deps + weights (~1 GB, MIT, one-time) ──────────
+  static async ensureTripoSR(spinner, pythonExe) {
+    if (await fs.pathExists(TRIPOSR_MARKER)) return;   // already done
+
+    spinner.text = 'Installing TripoSR dependencies (~50 MB)...';
+
+    // Run the inference script in --prefetch-only mode.
+    // It installs Python deps and downloads HuggingFace weights, then exits.
+    await new Promise((resolve, reject) => {
+      const child = spawn(pythonExe, [TRIPOSR_INFER_SCRIPT, '--prefetch-only'], {
+        windowsHide: true,
+        env: { ...process.env, ITERFORGE_HOME, PYTHONUNBUFFERED: '1' },
+      });
+
+      let lastProgress = '';
+      let buf = '';
+
+      const handleLine = (line) => {
+        line = line.trim();
+        if (!line) return;
+        if (line.startsWith('[TripoSR] PROGRESS:')) {
+          const m = line.match(/PROGRESS:\s*\d+\/\d+\s*(.*)/);
+          if (m) {
+            lastProgress = m[1];
+            spinner.text = `TripoSR: ${m[1]}`;
+          }
+        } else if (line.startsWith('[TripoSR] ERROR:')) {
+          reject(new Error(line.slice('[TripoSR] ERROR:'.length).trim()));
+        }
+      };
+
+      child.stdout?.on('data', chunk => {
+        buf += chunk.toString();
+        const parts = buf.split('\n'); buf = parts.pop();
+        parts.forEach(handleLine);
+      });
+
+      child.on('close', async (code) => {
+        if (buf.trim()) handleLine(buf);
+        if (code === 0) {
+          await fs.writeFile(TRIPOSR_MARKER, new Date().toISOString());
+          spinner.text = 'TripoSR ready.';
+          resolve();
+        } else {
+          // Non-zero exit but no [TripoSR] ERROR — log a warning but don't block setup
+          // (TripoSR is optional; users without 6 GB VRAM won't use it)
+          spinner.text = `TripoSR setup skipped (exit ${code}) — GPU may not meet requirements.`;
+          resolve();
+        }
+      });
+
+      child.on('error', (e) => reject(e));
+
+      // 20-minute timeout — weights are ~1 GB on slow connections
+      setTimeout(() => {
+        child.kill();
+        spinner.text = 'TripoSR download timed out — will retry on next launch.';
+        resolve();   // don't block rest of setup
+      }, 20 * 60 * 1000);
+    });
   }
 
   // Returns true only if torch is installed AND CUDA is available

@@ -63,7 +63,7 @@ export async function runInit(options = {}) {
     godotVersion = parseGodotVersion(content);
 
     if (godotVersion && parseFloat(godotVersion) < 4.0) {
-      console.warn(chalk.yellow('⚠ Godot 3 project detected. The IterForge plugin requires Godot 4.'));
+      console.warn(chalk.yellow('⚠ Godot 3 project detected. The Inter-Forge plugin requires Godot 4.'));
       console.warn('  Asset generation and filesystem export will still work, but the dock plugin is disabled.');
     }
   }
@@ -92,7 +92,7 @@ export async function runInit(options = {}) {
       iterforge: {
         command: 'iterforge',
         args: ['mcp'],
-        description: 'IterForge: open-source game asset pipeline. Local AI generation, Godot integration.'
+        description: 'Inter-Forge: open-source game asset pipeline. Local AI generation, Godot integration.'
       }
     }
   };
@@ -127,7 +127,7 @@ export async function runInit(options = {}) {
     }
     if (!Array.isArray(existing.tools)) existing.tools = [];
     const already = existing.tools.findIndex(t => t.name === 'iterforge');
-    const entry = { name: 'iterforge', description: 'IterForge game asset pipeline', command: 'iterforge mcp' };
+    const entry = { name: 'iterforge', description: 'Inter-Forge game asset pipeline', command: 'iterforge mcp' };
     if (already >= 0) existing.tools[already] = entry;
     else existing.tools.push(entry);
     await fs.writeJson(geminiConfig, existing, { spaces: 2 });
@@ -139,7 +139,7 @@ export async function runInit(options = {}) {
   await fs.ensureDir(assetsDir);
 
   // ── 8. Print summary ──────────────────────────────────────────────────────
-  console.log(chalk.bold('\n✓ IterForge initialized\n'));
+  console.log(chalk.bold('\n✓ Inter-Forge initialized\n'));
 
   console.log(chalk.bold('Project'));
   console.log(`  Name:         ${projectName}`);

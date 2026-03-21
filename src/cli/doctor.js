@@ -16,7 +16,7 @@ const LABELS = {
 const CRITICAL = new Set(['node', 'python', 'comfyui']);
 
 export async function runDoctor() {
-  console.log(chalk.bold('\nIterForge Health Check\n'));
+  console.log(chalk.bold('\nInter-Forge Health Check\n'));
 
   const report = await EnvDetector.checkAll();
   let hasFailure = false;
@@ -61,7 +61,7 @@ export async function runDoctor() {
     if (warnCount > 0) {
       console.log(chalk.yellow(`  ${warnCount} warning(s) — core pipeline is ready, some features may be limited.`));
     } else {
-      console.log(chalk.green('  All checks passed. IterForge is ready.'));
+      console.log(chalk.green('  All checks passed. Inter-Forge is ready.'));
     }
   }
 }

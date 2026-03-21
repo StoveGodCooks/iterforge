@@ -61,7 +61,7 @@ async function startComfyUI(env) {
 
   // Unmanaged — print manual instructions and exit
   if (comfyTool && comfyTool.managed === false) {
-    console.log(chalk.yellow('! ComfyUI was not installed by IterForge (managed: false).'));
+    console.log(chalk.yellow('! ComfyUI was not installed by Inter-Forge (managed: false).'));
     console.log('  Start it manually with:');
     console.log(chalk.cyan(`    cd "${comfyTool.path}" && python main.py`));
     return;

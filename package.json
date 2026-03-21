@@ -1,7 +1,7 @@
 {
   "name": "iterforge",
   "version": "1.0.0",
-  "description": "InterForge - Game Asset Generation Pipeline Orchestrator",
+  "description": "Inter-Forge - Game Asset Generation Pipeline Orchestrator",
   "author": "StoveGodCooks",
   "main": "electron-main.js",
   "bin": {
@@ -23,7 +23,7 @@
   },
   "build": {
     "appId": "com.iterforge.app",
-    "productName": "InterForge",
+    "productName": "Inter-Forge",
     "directories": {
       "output": "dist"
     },
@@ -37,6 +37,10 @@
       "assets/icon.png",
       "package.json"
     ],
+    "asarUnpack": [
+      "src/3d/**",
+      "comfyui-workflows/**"
+    ],
     "win": {
       "target": [
         {
@@ -46,7 +50,7 @@
           ]
         }
       ],
-      "artifactName": "InterForge-Setup-${version}.exe",
+      "artifactName": "Inter-Forge-Setup-${version}.exe",
       "signingHashAlgorithms": [],
       "sign": null
     },
@@ -60,7 +64,7 @@
           ]
         }
       ],
-      "artifactName": "InterForge-${version}.dmg",
+      "artifactName": "Inter-Forge-${version}.dmg",
       "category": "public.app-category.graphics-design"
     },
     "linux": {
@@ -78,7 +82,7 @@
           ]
         }
       ],
-      "artifactName": "InterForge-${version}.AppImage",
+      "artifactName": "Inter-Forge-${version}.AppImage",
       "category": "Graphics"
     },
     "nsis": {
@@ -88,11 +92,12 @@
       "uninstallerIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "InterForge"
+      "shortcutName": "Inter-Forge"
     }
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.0.4",
+    "archiver": "^7.0.1",
     "chalk": "^5.0.0",
     "commander": "^12.0.0",
     "cors": "^2.8.6",

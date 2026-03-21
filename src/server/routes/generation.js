@@ -1,10 +1,13 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs-extra';
+import sharp from 'sharp';
 import multer from 'multer';
 import { ITERFORGE_HOME } from '../../env/reader.js';
 import { generate as routerGenerate } from '../../backends/router.js';
-import { readHistory, HISTORY_FILE, ASSETS_DIR } from './history.js';
+import { readHistory, writeHistory, HISTORY_FILE, ASSETS_DIR } from './history.js';
+import { buildPresetPrompt, ASSET_PRESETS, GAME_ASSET_TYPES } from './asset-presets.js';
+import { removeBackground } from '../../tools/rembg.js';
 
 const router = express.Router();
 
@@ -14,9 +17,16 @@ const upload  = multer({ dest: TMP_DIR, limits: { fileSize: 25 * 1024 * 1024 } }
 // In-memory job store  { [jobId]: { status, result?, error? } }
 const jobs = new Map();
 
+// TTL cleanup — remove completed/failed jobs after 10 minutes
+function scheduleJobCleanup(jobId) {
+  setTimeout(() => jobs.delete(jobId), 10 * 60 * 1000);
+}
+
 const DEFAULT_NEGATIVE =
   'blurry, low quality, jpeg artifacts, watermark, signature, text, logo, ' +
-  'distorted, duplicate, out of frame, worst quality, low resolution';
+  'distorted, duplicate, out of frame, worst quality, low resolution, ' +
+  'bad anatomy, deformed, ugly, mutation, extra limbs, disfigured, ' +
+  'grainy, noisy, oversaturated, flat, boring, amateur';
 
 // ── POST /api/generate ───────────────────────────────────────────────────────
 router.post('/', upload.single('refImage'), async (req, res) => {
@@ -28,11 +38,12 @@ router.post('/', upload.single('refImage'), async (req, res) => {
       assetType      = 'character',
       artStyle       = 'stylized',
       subject        = '',
+      genre          = '',
       type           = 'custom',
       model          = null,
       seed           = null,
-      steps          = 30,
-      cfg            = 7,
+      steps          = 6,
+      cfg            = 2,
       sampler        = null,
       width          = 1024,
       height         = 1024,
@@ -41,34 +52,24 @@ router.post('/', upload.single('refImage'), async (req, res) => {
 
     // Build prompts
     let positive, negative;
+    let safeSteps = Math.min(Math.max(Number(steps) || 6,  1), 50);
+    let safeCfg   = Math.min(Math.max(Number(cfg)   || 2,  1), 20);
+    let presetLoraName = null;
+
     if (mode === 'preset') {
-      const styleMap = {
-        stylized:  'stylized art, vibrant colors, game art style',
-        realistic: 'photorealistic, highly detailed, cinematic lighting',
-        pixel:     'pixel art, 16-bit, retro game sprite',
-        painted:   'hand painted, watercolor texture, concept art',
-        lowpoly:   'low poly, geometric, flat shading',
-        anime:     'anime style, cel shaded, clean line art',
-      };
-      const typeMap = {
-        character:   'character, full body',
-        environment: 'environment, background, landscape',
-        prop:        'game prop, item, object, isolated',
-        creature:    'creature, monster, fantasy beast',
-        vehicle:     'vehicle, machine, mech',
-        ui:          'UI element, icon, HUD, interface',
-        texture:     'seamless texture, tileable, material',
-        concept:     'concept art, splash art, illustration',
-      };
-      const parts = [
-        'game asset',
-        subject.trim() || null,
-        typeMap[assetType] || assetType,
-        styleMap[artStyle] || artStyle,
-        'high quality, professional, detailed',
-      ].filter(Boolean);
-      positive = parts.join(', ');
-      negative = DEFAULT_NEGATIVE;
+      const built = buildPresetPrompt({
+        assetType,
+        artStyle,
+        subject: subject.trim() || prompt.trim(),
+        baseNegative: DEFAULT_NEGATIVE,
+        cfg:   safeCfg,
+        steps: safeSteps,
+      });
+      positive       = built.positive;
+      negative       = built.negative;
+      safeCfg        = Math.min(Math.max(built.cfg,   1), 20);
+      safeSteps      = Math.min(Math.max(built.steps, 1), 50);
+      presetLoraName = built.loraName ?? null;
     } else {
       if (!prompt.trim()) {
         return res.status(400).json({ error: 'prompt is required for custom mode' });
@@ -77,13 +78,33 @@ router.post('/', upload.single('refImage'), async (req, res) => {
       negative = negativePrompt || DEFAULT_NEGATIVE;
     }
 
+    const assetMode = 'standard';
+    const modeLabel = null;
+
+    // Resolve final dimensions — presets can suggest a size for optimal asset output.
+    // Only auto-apply if the user left a square resolution (the default). A non-square
+    // request means they deliberately chose a size — respect it.
+    let resolvedWidth  = Number(width)  || 1024;
+    let resolvedHeight = Number(height) || 1024;
+    if (mode === 'preset') {
+      const presetSuggest = ASSET_PRESETS[assetType]?.suggestSize;
+      if (presetSuggest && resolvedWidth === resolvedHeight) {
+        resolvedWidth  = presetSuggest.width;
+        resolvedHeight = presetSuggest.height;
+      }
+    }
+    const safeWidth  = Math.min(Math.max(resolvedWidth,  128), 2048);
+    const safeHeight = Math.min(Math.max(resolvedHeight, 128), 2048);
+
     const jobId    = `job-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const resolvedSeed = seed !== null ? Number(seed) : Math.floor(Math.random() * 2 ** 32);
+    const parsedSeed = Number(seed);
+    const resolvedSeed = (seed !== null && seed !== '' && seed !== undefined && Number.isFinite(parsedSeed) && parsedSeed >= 0)
+      ? parsedSeed
+      : Math.floor(Math.random() * 2 ** 32);
     const refPath  = req.file?.path ?? null;
 
     jobs.set(jobId, { status: 'pending', startTime: Date.now() });
-
-    res.json({ success: true, jobId, startTime: Date.now() });
+    res.json({ success: true, jobId, startTime: Date.now(), assetMode, modeLabel });
 
     // Run generation asynchronously
     (async () => {
@@ -93,14 +114,15 @@ router.post('/', upload.single('refImage'), async (req, res) => {
           type,
           positive,
           negative,
-          steps:         Number(steps),
-          cfg:           Number(cfg),
+          steps:         safeSteps,
+          cfg:           safeCfg,
           seed:          resolvedSeed,
-          width:         Number(width),
-          height:        Number(height),
-          sampler:       sampler || null,
-          model:         model   || null,
-          referencePath: refPath || null,
+          width:         safeWidth,
+          height:        safeHeight,
+          sampler:       sampler       || null,
+          model:         model         || null,
+          loraName:      presetLoraName || null,
+          referencePath: refPath       || null,
           strength:      Number(strength),
           outputDir:     ASSETS_DIR,
         });
@@ -108,13 +130,20 @@ router.post('/', upload.single('refImage'), async (req, res) => {
         // Clean up temp upload
         if (refPath) await fs.remove(refPath).catch(() => {});
 
-        // Rename to readable filename
+        // Rename to readable filename — include jobId suffix to prevent collisions
         const slug = positive.slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/, '');
-        const destName = `${slug}_${result.seed}.png`;
+        const destName = `${slug}_${result.seed}_${jobId.slice(-6)}.png`;
         const destPath = path.join(ASSETS_DIR, destName);
         if (result.imagePath !== destPath) {
           await fs.move(result.imagePath, destPath, { overwrite: true });
           result.imagePath = destPath;
+        }
+
+        // For isolated asset types (weapons, characters, props, etc.) strip the
+        // background using rembg so Juggernaut's photorealistic output becomes a
+        // clean transparent sprite regardless of what the model generated.
+        if (mode === 'preset' && GAME_ASSET_TYPES.has(assetType)) {
+          await removeBackground(destPath, { white: false });
         }
 
         // Append to history
@@ -125,21 +154,23 @@ router.post('/', upload.single('refImage'), async (req, res) => {
           negative,
           mode,
           type,
+          assetMode,
+          modeLabel,
           seed:        result.seed,
           backend:     result.backend,
           imagePath:   destPath,
           filename:    destName,
-          params:      { steps: Number(steps), cfg: Number(cfg), width: Number(width), height: Number(height) },
+          params:      { steps: safeSteps, cfg: safeCfg, width: safeWidth, height: safeHeight },
         };
 
-        const history = await readHistory();
-        history.unshift(historyEntry);
-        await fs.writeJson(HISTORY_FILE, history.slice(0, 200), { spaces: 2 });
+        await writeHistory(h => [historyEntry, ...h]);
 
         jobs.set(jobId, { status: 'completed', result: historyEntry });
+        scheduleJobCleanup(jobId);
       } catch (err) {
         if (refPath) await fs.remove(refPath).catch(() => {});
         jobs.set(jobId, { status: 'failed', error: err.message });
+        scheduleJobCleanup(jobId);
       }
     })();
 
@@ -155,12 +186,45 @@ router.get('/:jobId', (req, res) => {
   res.json(job);
 });
 
+// ── POST /api/generate/rotate — rotate a generated image 90° CW or CCW ───────
+// Body: { filename: string, direction: 'cw' | 'ccw' }
+// Rotates the file in-place and returns the updated timestamp for cache-busting.
+router.post('/rotate', async (req, res) => {
+  try {
+    const { filename, direction = 'cw' } = req.body;
+    if (!filename) return res.status(400).json({ error: 'filename required' });
+
+    const filePath = path.join(ASSETS_DIR, path.basename(filename));
+    if (!(await fs.pathExists(filePath))) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const degrees = direction === 'ccw' ? 270 : 90;   // 270° CCW == 90° CW counterpart
+    const tmp = filePath + '.rot.png';
+    await sharp(filePath).rotate(degrees).toFile(tmp);
+    await fs.move(tmp, filePath, { overwrite: true });
+
+    // Update history entry timestamp so the frontend re-fetches
+    const timestamp = Date.now();
+    await writeHistory(h =>
+      h.map(e => (path.basename(e.filename ?? '') === path.basename(filename)
+        ? { ...e, timestamp }
+        : e))
+    );
+
+    res.json({ success: true, filename, timestamp });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── GET /api/generate/image/:filename  — serve PNG from assets ───────────────
 router.get('/image/:filename', async (req, res) => {
-  const filePath = path.join(ASSETS_DIR, req.params.filename);
+  const filePath = path.join(ASSETS_DIR, path.basename(req.params.filename));
   if (!(await fs.pathExists(filePath))) {
     return res.status(404).json({ error: 'Image not found' });
   }
+  res.setHeader('Cache-Control', 'no-store');
   res.sendFile(filePath);
 });
 

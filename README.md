@@ -1,103 +1,117 @@
-# IterForge — Game Asset Generation Pipeline Orchestrator
+# InterForge — Start Here
 
-Generate game assets using AI. Create arenas, cards, and more from text descriptions. Integrated with ComfyUI locally, with optional cloud backend.
-
-**Status: V1 (Alpha)** — Core pipeline implemented. Test suite passes.
-
-## Quick Start (5 Minutes)
-
-### 1. Install
-
-```bash
-npm install -g iterforge
-```
-
-### 2. Initialize Your Project
-
-```bash
-cd your-godot-4-project
-iterforge init
-```
-
-This creates `iterforge.json` and MCP config for AI agents.
-
-### 3. Check Environment
-
-```bash
-iterforge doctor
-```
-
-Verify Node, Python, ComfyUI are ready. Install missing tools:
-
-```bash
-iterforge install
-```
-
-(Downloads Python 3.11 + ComfyUI. Takes ~2-5 min. One-time only.)
-
-### 4. Start ComfyUI Backend
-
-```bash
-iterforge start comfyui
-```
-
-### 5. Generate Your First Asset
-
-```bash
-iterforge generate arena --faction AEGIS --dry-run
-```
-
-Try without the `--dry-run` flag to actually generate (ComfyUI must be running).
-
-### 6. Assets Auto-Import to Godot
-
-When you generate an asset, it's placed in `assets/iterforge/`. Enable the IterForge plugin in Godot 4 and it auto-imports to your project.
-
-## Features (V1)
-
-- **CLI Pipeline**: `iterforge generate` with customizable settings
-- **ComfyUI Backend**: Local, GPU-powered image generation
-- **Godot Integration**: Auto-import assets directly into your Godot 4 project
-- **MCP Interface**: AI agents (Claude CLI, Gemini CLI) can drive the full pipeline
-- **Zero Accounts**: Fully local, works offline, no logins required
-
-## Supported Asset Types (V1)
-
-- `arena` — Battle environment backgrounds (1024x1024)
-- `card` — Game card artwork (coming soon)
-
-## Architecture
-
-```
-iterforge (Node.js CLI)
-├── ComfyUI backend (local, GPU-powered)
-├── Godot plugin (4.x only)
-└── MCP server (for AI agents)
-```
-
-## Documentation
-
-- **[Godot Setup](docs/godot-setup.md)** — Install and enable the plugin
-- **[CLI Reference](docs/cli-reference.md)** — All commands and options
-- **[Architecture](docs/architecture.md)** — Design patterns and internals
-
-## Development
-
-Run tests:
-```bash
-npm test
-```
-
-## License
-
-Proprietary. See LICENSE file.
-
-## Support
-
-- Issues: GitHub (coming soon)
-- Discord: (community server — link TBA)
-- Docs: https://iterforge.itch.io
+> **Every session begins with this file.**
+> Read this → check ROADMAP.md → skim last DEVLOG entry → then start work.
 
 ---
 
-Made with ❤️ for game developers.
+## What Is InterForge?
+
+A local-first AI game asset generation pipeline built for game developers. One `.exe` installer, no cloud accounts, no API keys, no subscriptions. Built on ComfyUI + DreamShaper XL Lightning. The goal is to be the tool game devs actually reach for when they need sprites, characters, environments, and props — fast, offline, and without the setup headache.
+
+**Stack:** Electron → Express (Node.js) → React/Vite/Tailwind → ComfyUI (Python)
+
+---
+
+## Current State
+
+| Area | Status |
+|------|--------|
+| Desktop App (Electron) | ✅ Stable |
+| Backend (Express API) | ✅ Stable |
+| Frontend (React UI) | ✅ Stable |
+| ComfyUI Integration | ✅ Working |
+| Model: DreamShaper XL Lightning | ✅ Active |
+| 3D Reconstruction (TripoSR) | ✅ Working — auto-chain, upright mesh, textured |
+| 3D Viewer (Babylon.js) | ✅ Working |
+| MCP Server (Claude integration) | ✅ Working — full blocking image+3D pipeline |
+| Sprite Sheet Generator | ✅ Working |
+| Settings Panel | ✅ Working |
+| Batch Generation | ⏳ Planned |
+| Inpainting / Variations | ⏳ Planned |
+| Multi-view Texturing (Zero123++) | ⏳ Planned (V1.2) |
+
+---
+
+## Session Start Checklist
+
+Before writing a single line of code, run through these:
+
+- [ ] Read this file fully
+- [ ] Open `ROADMAP.md` — check what's in progress and what's next
+- [ ] Read the last entry in `DEVLOG.md` — get back in the headspace
+- [ ] Run `npm run gui` — confirm the app boots and ComfyUI dot is green
+- [ ] Check git status — know what's staged, what's dirty
+
+---
+
+## Session End Checklist
+
+Before closing out, always do these:
+
+- [ ] Commit working code — specific files, clear message
+- [ ] Update `ROADMAP.md` — mark completed phases, update next steps and last session summary
+- [ ] Write a `DEVLOG.md` entry — date, what was done, decisions made, problems hit, wins, dead ends
+- [ ] Update the Current State table above if anything changed
+
+---
+
+## Key Commands
+
+```bash
+npm run gui               # Launch the Electron app
+npm run dev:server        # Express backend only (port 3000)
+npm run build:frontend    # Rebuild React UI (required after frontend changes)
+npm run build:exe         # Full Windows installer build
+npm run clean             # Wipe dist/ folder
+npm test                  # Run test suite
+```
+
+---
+
+## Key Files Map
+
+```
+electron-main.js                     # App entry — starts Express + ComfyUI
+src/server/app.js                    # Express server setup
+src/server/routes/generation.js      # POST /api/generate (core generation logic)
+src/server/routes/triposr.js         # POST /api/triposr/generate + polling + file serve
+src/server/routes/history.js         # GET /api/history
+src/server/routes/status.js          # GET /api/status (ComfyUI + server health)
+src/server/comfyui-manager.js        # ComfyUI subprocess manager
+src/env/manager.js                   # Python install + model download
+src/backends/comfyui.js              # ComfyUI HTTP client
+src/backends/triposr.js              # TripoSR subprocess spawner + Python detection
+src/mcp/server.js                    # MCP stdio server (Claude integration)
+src/mcp/tools.js                     # MCP tool handlers — generate_asset (full pipeline)
+src/3d/inference/triposr_infer.py    # TripoSR pipeline: preprocess → infer → UV → GLB
+frontend/src/App.jsx                 # Main UI layout
+frontend/src/components/
+  GenerationPanel.jsx                # Left sidebar — controls + silent 3D auto-chain
+  PreviewArea.jsx                    # Main canvas + history strip + 3D viewer
+  ModelViewer.jsx                    # Babylon.js GLB viewer component
+  SettingsPanel.jsx                  # Config + TripoSR prefetch panel
+comfyui-workflows/
+  txt2img-dreamshaper.json           # Base workflow template
+```
+
+---
+
+## Where Things Live on Disk
+
+| Asset | Path |
+|-------|------|
+| Models (checkpoints) | `%APPDATA%\IterForge\comfyui\models\checkpoints\` |
+| Generation history | `%APPDATA%\IterForge\history.json` |
+| ComfyUI output images | `%APPDATA%\IterForge\comfyui\output\` |
+| TripoSR weights (~1GB) | `%APPDATA%\IterForge\3d\weights\triposr\` |
+| TripoSR source package | `%APPDATA%\IterForge\3d\tsr_pkg\TripoSR\` |
+| 3D output (GLBs) | `%APPDATA%\IterForge\3d\triposr-out\` |
+| Built installer | `dist\InterForge-Setup-x.x.x.exe` |
+
+---
+
+## Reference Files
+
+- 📋 **[ROADMAP.md](ROADMAP.md)** — All phases, completion status, what's next, last session summary
+- 📓 **[DEVLOG.md](DEVLOG.md)** — Session journal, architectural decisions, dead ends, wins

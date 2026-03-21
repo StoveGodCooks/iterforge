@@ -2,8 +2,13 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs-extra';
 
-export const ITERFORGE_HOME = path.join(os.homedir(), 'AppData', 'Roaming', 'IterForge');
-export const ENV_PATH = path.join(ITERFORGE_HOME, 'env.json');
+export const ITERFORGE_HOME     = path.join(os.homedir(), 'AppData', 'Roaming', 'IterForge');
+export const ENV_PATH           = path.join(ITERFORGE_HOME, 'env.json');
+export const BLENDER_ASSETS_DIR = path.join(ITERFORGE_HOME, '3d');
+
+// ComfyUI's embedded Python — torch/transformers already installed here.
+// Used by TripoSR inference to avoid a separate Python install.
+export const COMFYUI_PYTHON     = path.join(ITERFORGE_HOME, 'comfyui', 'python_embeded', 'python.exe');
 
 const DEFAULT_ENV = {
   version: '1.0',
