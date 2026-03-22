@@ -65,27 +65,37 @@ def apply_depth_to_profile(profile_sm: list, depth_profile: np.ndarray,
                             zones: np.ndarray, asset_config: dict,
                             min_depth: float = 0.025) -> np.ndarray:
     """
-    Finalise depths based on the sampled profile.
+    Finalise depths based on the sampled profile and zone semantics.
     
-    Unchained version: applies longitudinal smoothing and forces
-    symmetry to remove 'brushstroke ripples' and AI wobbles.
+    Unchained version: applies longitudinal smoothing, forces symmetry,
+    and applies per-zone depth scaling from asset_config.
     """
-    n = min(len(profile_sm), len(depth_profile))
+    n = min(len(profile_sm), len(depth_profile), len(zones))
     depths = np.zeros(n, dtype=np.float32)
 
     # 1. Longitudinal Smoothing (Digital Sandpaper)
-    # We smooth the raw AI depth along the Y-axis to remove high-frequency ripples
-    # while keeping the overall shape of the weapon.
     smoothed_raw = _smooth1d(depth_profile, sigma=2.5)
 
-    # 2. Aesthetic Scaling and Clamping
+    # 2. Zone-Aware Scaling
+    # We pull depth_ratio from JSON config per-zone
+    zone_cfg = asset_config.get('zones', {})
+    scale_defaults = {
+        'blade':  0.12,   # thin blade
+        'tip':    0.15,   
+        'guard':  0.45,   # thick guard
+        'handle': 0.35,   # ergonomic handle
+        'pommel': 0.40,
+    }
+    
     for i in range(n):
+        z_label = str(zones[i])
+        # Multiplier from config, or default if missing
+        scale = zone_cfg.get(z_label, {}).get('depth_ratio', scale_defaults.get(z_label, 0.12))
+        
         raw_d = float(smoothed_raw[i])
-        # Force sword-like thickness (0.12 scale)
-        depths[i] = max(raw_d * 0.12, min_depth)
+        depths[i] = max(raw_d * scale, min_depth)
 
     # 3. Final Profile Smooth
-    # One last pass to ensure perfectly clean transitions between zones
     return _smooth1d(depths, sigma=1.2)
 
 

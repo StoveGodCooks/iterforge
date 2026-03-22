@@ -121,7 +121,7 @@ export class EnvDetector {
       return {
         status: 'WARN',           // Docker is V2 — warn, not block
         code: 'ERR_DOCKER_MISSING',
-        detail: 'Required for advanced tools (Blender, Inkscape) in V2.',
+        detail: 'Required for advanced tools (Blender) in V2.',
         fix: 'Install Docker Desktop from https://www.docker.com/products/docker-desktop'
       };
     }

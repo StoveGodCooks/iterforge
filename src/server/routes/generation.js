@@ -4,10 +4,9 @@ import fs from 'fs-extra';
 import sharp from 'sharp';
 import multer from 'multer';
 import { ITERFORGE_HOME } from '../../env/reader.js';
-import { generate as routerGenerate } from '../../backends/router.js';
-import { readHistory, writeHistory, HISTORY_FILE, ASSETS_DIR } from './history.js';
-import { buildPresetPrompt, ASSET_PRESETS, GAME_ASSET_TYPES } from './asset-presets.js';
-import { removeBackground } from '../../tools/rembg.js';
+import { MasterForgePipeline } from '../../pipeline/orchestrator.js';
+import { ASSETS_DIR, writeHistory } from './history.js';
+import { buildPresetPrompt, ASSET_PRESETS } from './asset-presets.js';
 
 const router = express.Router();
 
@@ -81,9 +80,7 @@ router.post('/', upload.single('refImage'), async (req, res) => {
     const assetMode = 'standard';
     const modeLabel = null;
 
-    // Resolve final dimensions — presets can suggest a size for optimal asset output.
-    // Only auto-apply if the user left a square resolution (the default). A non-square
-    // request means they deliberately chose a size — respect it.
+    // Resolve final dimensions
     let resolvedWidth  = Number(width)  || 1024;
     let resolvedHeight = Number(height) || 1024;
     if (mode === 'preset') {
@@ -96,77 +93,60 @@ router.post('/', upload.single('refImage'), async (req, res) => {
     const safeWidth  = Math.min(Math.max(resolvedWidth,  128), 2048);
     const safeHeight = Math.min(Math.max(resolvedHeight, 128), 2048);
 
-    const jobId    = `job-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const parsedSeed = Number(seed);
     const resolvedSeed = (seed !== null && seed !== '' && seed !== undefined && Number.isFinite(parsedSeed) && parsedSeed >= 0)
       ? parsedSeed
       : Math.floor(Math.random() * 2 ** 32);
     const refPath  = req.file?.path ?? null;
 
+    // Build Pipeline Config
+    const config = {
+      intent:    positive,
+      assetType: assetType,
+      artStyle:  artStyle,
+      output:    ['png'],
+      generate: {
+        enabled:       true,
+        prompt:        positive,
+        negative:      negative,
+        steps:         safeSteps,
+        cfg:           safeCfg,
+        seed:          resolvedSeed,
+        width:         safeWidth,
+        height:        safeHeight,
+        model:         model,
+        loraName:      presetLoraName,
+        sampler:       sampler,
+        referencePath: refPath,
+        strength:      Number(strength),
+      },
+      multiview: { enabled: false },
+      forge:     { enabled: false },
+      deliver:   { enabled: true, history: true },
+    };
+
+    // Note: We don't use the jobId from PipelineJob here yet to keep the 
+    // frontend /api/generate/:jobId polling working. We wrap the pipeline.
+    const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     jobs.set(jobId, { status: 'pending', startTime: Date.now() });
     res.json({ success: true, jobId, startTime: Date.now(), assetMode, modeLabel });
 
-    // Run generation asynchronously
+    // Run pipeline asynchronously
     (async () => {
       try {
-        await fs.ensureDir(ASSETS_DIR);
-        const result = await routerGenerate({
-          type,
-          positive,
-          negative,
-          steps:         safeSteps,
-          cfg:           safeCfg,
-          seed:          resolvedSeed,
-          width:         safeWidth,
-          height:        safeHeight,
-          sampler:       sampler       || null,
-          model:         model         || null,
-          loraName:      presetLoraName || null,
-          referencePath: refPath       || null,
-          strength:      Number(strength),
-          outputDir:     ASSETS_DIR,
+        const pipelineResult = await MasterForgePipeline.run(config, (progress) => {
+          if (jobs.has(jobId)) {
+            jobs.get(jobId).progress = `${progress.stage}: ${progress.status}`;
+          }
         });
 
-        // Clean up temp upload
-        if (refPath) await fs.remove(refPath).catch(() => {});
-
-        // Rename to readable filename — include jobId suffix to prevent collisions
-        const slug = positive.slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/, '');
-        const destName = `${slug}_${result.seed}_${jobId.slice(-6)}.png`;
-        const destPath = path.join(ASSETS_DIR, destName);
-        if (result.imagePath !== destPath) {
-          await fs.move(result.imagePath, destPath, { overwrite: true });
-          result.imagePath = destPath;
-        }
-
-        // For isolated asset types (weapons, characters, props, etc.) strip the
-        // background using rembg so Juggernaut's photorealistic output becomes a
-        // clean transparent sprite regardless of what the model generated.
-        if (mode === 'preset' && GAME_ASSET_TYPES.has(assetType)) {
-          await removeBackground(destPath, { white: false });
-        }
-
-        // Append to history
-        const historyEntry = {
-          id:          jobId,
-          timestamp:   new Date().toISOString(),
-          prompt:      positive,
-          negative,
-          mode,
-          type,
-          assetMode,
-          modeLabel,
-          seed:        result.seed,
-          backend:     result.backend,
-          imagePath:   destPath,
-          filename:    destName,
-          params:      { steps: safeSteps, cfg: safeCfg, width: safeWidth, height: safeHeight },
-        };
-
-        await writeHistory(h => [historyEntry, ...h]);
-
-        jobs.set(jobId, { status: 'completed', result: historyEntry });
+        // Map pipeline result back to the legacy jobs format for the frontend
+        jobs.set(jobId, { 
+          status: 'completed', 
+          result: pipelineResult.outputs.history 
+        });
         scheduleJobCleanup(jobId);
+
       } catch (err) {
         if (refPath) await fs.remove(refPath).catch(() => {});
         jobs.set(jobId, { status: 'failed', error: err.message });

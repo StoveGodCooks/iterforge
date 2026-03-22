@@ -16,7 +16,7 @@ const CATEGORY_LABELS = {
   filesystem: '📁 Filesystem',
   python:  '🐍 Python',
   blender: '🔷 Blender',
-  comfyui: '🧠 ComfyUI',
+  comfyui: '🧠 Inter-Forge Engine',
   api:     '🔌 API Routes',
   done:    '',
   error:   '💥 Error',

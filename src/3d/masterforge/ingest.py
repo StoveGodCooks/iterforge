@@ -11,51 +11,9 @@ keeps only the largest connected component.
 """
 
 import os
-import subprocess
 import numpy as np
 from collections import deque
 
-
-def find_inkscape() -> str:
-    """Locate inkscape.exe in common and managed paths."""
-    import os
-    from pathlib import Path
-    
-    # Priority 1: Managed install
-    # We look relative to the package root, then fallback to common paths
-    # The IterForge home is typically AppData/Roaming/IterForge
-    roaming = os.path.join(os.environ['APPDATA'], 'IterForge')
-    managed = os.path.join(roaming, 'inkscape', 'bin', 'inkscape.exe')
-    if os.path.exists(managed):
-        return managed
-        
-    # Priority 2: Common Program Files
-    candidates = [
-        r'C:\Program Files\Inkscape\bin\inkscape.exe',
-        r'C:\Program Files (x86)\Inkscape\bin\inkscape.exe',
-    ]
-    for c in candidates:
-        if os.path.exists(c):
-            return c
-            
-    # Priority 3: PATH
-    return 'inkscape'
-
-
-def rasterize_svg(svg_path: str, output_png: str, width: int = 1024) -> bool:
-    """Headless rasterization of SVG to PNG for AI processing."""
-    ink_exe = find_inkscape()
-    try:
-        subprocess.run([
-            ink_exe, '--export-type=png',
-            '--export-filename=' + output_png,
-            '--export-width=' + str(width),
-            svg_path
-        ], check=True, capture_output=True)
-        return os.path.exists(output_png)
-    except Exception as e:
-        print(f'[masterforge.ingest] SVG rasterization failed: {e}')
-        return False
 
 
 def load_rgba(image_path: str) -> np.ndarray:

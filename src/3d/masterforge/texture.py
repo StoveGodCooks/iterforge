@@ -147,32 +147,30 @@ def _dilate_atlas(texture: np.ndarray, filled: np.ndarray,
                   passes: int = 2) -> np.ndarray:
     """
     Expand filled texels into empty neighbours to eliminate black seams
-    at UV island boundaries.
+    at UV island boundaries. Uses vectorized uniform_filter for performance.
     """
-    from scipy.ndimage import binary_dilation
+    from scipy.ndimage import binary_dilation, uniform_filter
 
     result = texture.copy()
-    mask   = filled.copy()
+    mask   = filled.astype(np.float32)
 
     for _ in range(passes):
-        dilated_mask = binary_dilation(mask)
-        new_pixels   = dilated_mask & ~mask
+        # Find neighbors that are empty in the current mask
+        dilated_mask = binary_dilation(mask > 0.5)
+        new_pixels   = dilated_mask & (mask < 0.5)
         if not new_pixels.any():
             break
 
-        # For each newly filled pixel, average its filled neighbours
-        ys, xs = np.where(new_pixels)
-        for y, x in zip(ys, xs):
-            neighbours = []
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    ny, nx = y + dy, x + dx
-                    if (0 <= ny < mask.shape[0] and
-                            0 <= nx < mask.shape[1] and mask[ny, nx]):
-                        neighbours.append(texture[ny, nx])
-            if neighbours:
-                result[y, x] = np.mean(neighbours, axis=0)
+        # Calculate average color of ALL neighbors using a 3x3 box filter
+        # We divide by the count of filled neighbors to get the true average.
+        count = uniform_filter(mask, size=3) * 9.0
+        # Replace 0s with 1 to avoid div-by-zero
+        count_safe = np.where(count > 0, count, 1.0)
+        
+        for c in range(4): # RGBA channels
+            avg_color = uniform_filter(result[:, :, c] * mask, size=3) * 9.0
+            result[:, :, c] = np.where(new_pixels, avg_color / count_safe, result[:, :, c])
 
-        mask = dilated_mask
+        mask = dilated_mask.astype(np.float32)
 
     return result

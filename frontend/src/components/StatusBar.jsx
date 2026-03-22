@@ -16,12 +16,12 @@ export default function StatusBar({ status, onStartComfy, onSetup }) {
 
   function ComfyStatus() {
     if (comfyOk) {
-      return <span className="flex items-center text-green-400">{dot(true)}ComfyUI</span>;
+      return <span className="flex items-center text-green-400">{dot(true)}Inter-Forge</span>;
     }
     if (comfyStarting) {
       return (
         <span className="flex items-center gap-1.5 text-yellow-400">
-          <Spinner />ComfyUI starting…
+          <Spinner />Inter-Forge starting…
         </span>
       );
     }
@@ -51,7 +51,7 @@ export default function StatusBar({ status, onStartComfy, onSetup }) {
     if (comfyInstalled === false) {
       return (
         <span className="flex items-center gap-1.5">
-          {dot(false, 'bg-slate-500')}ComfyUI
+          {dot(false, 'bg-slate-500')}Inter-Forge
           <button
             onClick={onSetup}
             className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-brand-600 hover:bg-brand-500 text-white transition-colors"
@@ -64,7 +64,7 @@ export default function StatusBar({ status, onStartComfy, onSetup }) {
     // Installed but stopped
     return (
       <span className="flex items-center gap-1.5">
-        {dot(false)}ComfyUI
+        {dot(false)}Inter-Forge
         <button
           onClick={onStartComfy}
           className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-brand-600 hover:bg-brand-500 text-white transition-colors"
@@ -79,11 +79,6 @@ export default function StatusBar({ status, onStartComfy, onSetup }) {
     <div className="flex items-center gap-4 text-xs text-slate-400">
       <ComfyStatus />
       <span>{dot(status.server === 'ok')}Server</span>
-      {status.tier && (
-        <span className="px-1.5 py-0.5 rounded bg-surface-600 text-brand-400 uppercase tracking-wider text-[10px]">
-          {status.tier}
-        </span>
-      )}
     </div>
   );
 }

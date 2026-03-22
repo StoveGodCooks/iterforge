@@ -24,12 +24,6 @@ def xz_ring(y: float, xl: float, xr: float,
     rz = max(depth * 0.5, 1e-6)
     N  = 32  # High resolution for smooth surfaces
 
-    pts_xz = []
-    for i in range(N):
-        angle = i * 2.0 * math.pi / N
-        cos_a = math.cos(angle)
-        sin_a = math.sin(angle)
-        
     # Dynamic Anatomy: Vary the sharpness based on the zone
     # lenticular (blade) -> 1.1 (razor sharp)
     # flat (guard)       -> 1.8 (solid/machined)
@@ -58,26 +52,46 @@ def xz_ring(y: float, xl: float, xr: float,
 def build_wires(profile_full: list, cq, min_width: float = 0.005) -> list:
     """
     Build CadQuery Wire objects using every slice for high resolution.
+    Uses makeSpline for smooth curved surfaces.
     """
+    if not profile_full:
+        print('[masterforge.loft] ERROR: profile_full is empty')
+        return []
+
     wires   = []
     skipped = 0
 
     for entry in profile_full:
-        y, xl, xr, depth, zone, cs = entry
-        if (xr - xl) < min_width:
-            skipped += 1
-            continue
-        pts = xz_ring(y, xl, xr, depth, cs)
         try:
-            vecs = [cq.Vector(x, yh, z) for x, yh, z in pts]
-            vecs.append(vecs[0])
-            wires.append(cq.Wire.makePolygon(vecs))
+            y, xl, xr, depth, zone, cs = entry
+            width = xr - xl
+            
+            # Skip slices that are too thin to avoid degenerate geometry
+            if width < min_width:
+                skipped += 1
+                continue
+                
+            pts = xz_ring(y, xl, xr, depth, cs)
+            vecs = [cq.Vector(vx, vy, vz) for vx, vy, vz in pts]
+            
+            # periodic=True ensures the spline closes smoothly without a seam
+            wire = cq.Wire.makeSpline(vecs, periodic=True)
+            wires.append(wire)
+            
         except Exception as e:
-            print(f'[masterforge.loft] wire error y={y:.4f}: {e}')
+            # Log specific slice failure but continue building others
+            # Often one bad slice shouldn't kill the whole mesh
+            y_val = entry[0] if entry else 0
+            print(f'[masterforge.loft] wire error at y={y_val:.4f}: {e}')
             skipped += 1
 
     print(f'[masterforge.loft] {len(profile_full)} slices -> '
           f'{len(wires)} wires ({skipped} skipped)')
+          
+    if len(wires) < 2 and len(profile_full) > 2:
+        print(f'[masterforge.loft] WARNING: extreme skip rate! '
+              f'Check if min_width={min_width} is too aggressive.')
+              
     return wires
 
 

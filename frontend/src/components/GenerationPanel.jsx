@@ -9,6 +9,7 @@ const GAME_ASSET_TYPE_IDS = new Set(['icon', 'item', 'weapon', 'prop', 'ui', 'ti
 const MESH_ASSET_TYPES = new Set([]);  // disabled — user manually clicks Pro Sword Asset or Apply to Mesh
 
 const ASSET_TYPES = [
+  { id: 'concept',     label: 'Concept Art' },
   { id: 'character',   label: 'Character'   },
   { id: 'creature',    label: 'Creature'    },
   { id: 'environment', label: 'Environment' },
@@ -29,7 +30,6 @@ const ASSET_TYPES = [
   { id: 'ui',          label: '⚔ UI Element'  },
   { id: 'vfx',         label: 'VFX/Spell'  },
   { id: 'skybox',      label: 'Skybox'      },
-  { id: 'concept',     label: 'Concept Art' },
   { id: 'particle',    label: 'Particle'    },
 ];
 
@@ -63,11 +63,11 @@ const GAME_GENRES = [
 ];
 
 const SAMPLERS = [
-  { id: 'dpmpp_2m',     label: 'Balanced',              desc: 'Best quality/speed balance. Safe default.' },
-  { id: 'euler',        label: 'Fast & Clean',         desc: 'Quick previews, good for iteration.' },
-  { id: 'dpmpp_2m_sde', label: 'Detailed + Varied',    desc: 'More creative details, less reproducible.' },
-  { id: 'ddim',         label: 'Precise & Consistent', desc: 'Exact reproducibility with same seed.' },
-  { id: 'heun',         label: 'Maximum Quality',      desc: 'Slowest but most accurate (2× compute).' },
+  { id: 'dpmpp_2m',     label: 'Balanced' },
+  { id: 'euler',        label: 'Fast' },
+  { id: 'dpmpp_2m_sde', label: 'Detailed' },
+  { id: 'ddim',         label: 'Precise' },
+  { id: 'heun',         label: 'Maximum' },
 ];
 
 const RESOLUTIONS = [
@@ -80,56 +80,7 @@ const RESOLUTIONS = [
 ];
 
 // Pro tool presets — modify prompts & generation params
-const PRO_TOOLS = [
-  {
-    id: 'seamless',
-    label: 'Seamless/Tiling',
-    icon: '⊞',
-    desc: 'Forces tileable output for textures',
-    promptAdd: 'seamless pattern, tileable texture, no edges, repeating pattern',
-    negAdd: 'border, frame, vignette, centered subject',
-  },
-  {
-    id: 'transparent',
-    label: 'Clean Cutout',
-    icon: '◻',
-    desc: 'Isolated subject, no background (for sprites)',
-    promptAdd: 'isolated on solid white background, clean edges, no shadow, sprite ready',
-    negAdd: 'background scenery, gradient background, complex background, shadow, glow',
-  },
-  {
-    id: 'charsheet',
-    label: 'Char. Sheet',
-    icon: '⊕',
-    desc: 'Multi-pose character reference sheet',
-    promptAdd: 'character reference sheet, multiple angles, front view back view side view, turnaround sheet, orthographic',
-    negAdd: 'single pose, single angle, landscape, background',
-  },
-  {
-    id: 'highdetail',
-    label: 'High Detail',
-    icon: '✦',
-    desc: 'Maximum detail boost',
-    promptAdd: 'ultra detailed, 8k resolution, intricate details, highly polished, AAA game quality',
-    negAdd: 'blurry, low detail, rough, sketch',
-  },
-  {
-    id: 'gameready',
-    label: 'Game Ready',
-    icon: '⬡',
-    desc: 'Optimized for game engine import',
-    promptAdd: 'game ready asset, clean topology concept, flat lighting, PBR ready, orthographic lighting',
-    negAdd: 'overexposed, complex lighting, subsurface scattering, lens flare',
-  },
-  {
-    id: 'conceptline',
-    label: 'Concept Lined',
-    icon: '✏',
-    desc: 'Clean lineart with concept art style',
-    promptAdd: 'clean lineart, ink outlines, concept art lines, professional illustration, bold outlines',
-    negAdd: 'painted, no outlines, blended, soft edges',
-  },
-];
+// (Removed Phase 31 - UI Cleanup)
 
 const STORAGE_KEY = 'interforge_panel_v1';
 function loadSaved() {
@@ -142,14 +93,14 @@ function persist(patch) {
   } catch {}
 }
 
-export default function GenerationPanel({ onGenerated, reuseSettings, onReuseConsumed, onGeneratingChange }) {
+export default function GenerationPanel({ onOpenAnvil, onGenerated, reuseSettings, onReuseConsumed, onGeneratingChange, tinkerMode, onToggleTinker }) {
   const saved = loadSaved();
   // Mode is always 'preset' — Custom/Template tabs were removed
   const mode = 'preset';
   const [prompt,      setPrompt]      = useState(saved.prompt      ?? '');
   const [negative,    setNegative]    = useState(saved.negative    ?? '');
   const [promptBoost, setPromptBoost] = useState('');
-  const [assetType,   setAssetType]   = useState(saved.assetType   ?? 'character');
+  const [assetType,   setAssetType]   = useState(saved.assetType   ?? 'concept');
   const [artStyle,    setArtStyle]    = useState(saved.artStyle    ?? 'stylized');
   const [genre,       setGenre]       = useState(saved.genre       ?? '');
   const [subject,     setSubject]     = useState(saved.subject     ?? '');
@@ -168,7 +119,6 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
   const [showAssets,  setShowAssets]  = useState(true);
   const [showStyles,  setShowStyles]  = useState(true);
   const [showGenre,   setShowGenre]   = useState(false);
-  const [activeTools, setActiveTools] = useState(new Set());
   const [templates,   setTemplates]   = useState([]);
   const [selectedTpl, setSelectedTpl] = useState('');
   const [generating,    setGenerating]    = useState(false);
@@ -192,20 +142,16 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
   }, []);
 
   // Persist settings on change
-  useEffect(() => { persist({ prompt, negative, assetType, artStyle, genre, subject, steps, cfg, sampler, resolution, model }); },
-    [prompt, negative, assetType, artStyle, genre, subject, steps, cfg, sampler, resolution, model]);
+  useEffect(() => { persist({ prompt, negative, assetType, artStyle, genre, subject, steps, cfg, sampler, resolution }); },
+    [prompt, negative, assetType, artStyle, genre, subject, steps, cfg, sampler, resolution]);
 
   // Apply reuseSettings from history
   useEffect(() => {
     if (!reuseSettings) return;
     const e = reuseSettings;
-    if (e.prompt)  { setPrompt(e.prompt);  setMode('custom'); }
+    if (e.prompt)  { setPrompt(e.prompt); }
     if (e.params?.steps)  setSteps(e.params.steps);
     if (e.params?.cfg)    setCfg(e.params.cfg);
-    if (e.seed)           setSeed(String(e.seed));
-    const rIdx = RESOLUTIONS.findIndex(r => r.w === e.params?.width && r.h === e.params?.height);
-    if (rIdx >= 0) setResolution(rIdx);
-    setShowAdv(true);
     onReuseConsumed?.();
   }, [reuseSettings]);
 
@@ -218,7 +164,7 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [generating, mode, prompt, assetType, artStyle, genre, subject, steps, cfg, sampler, resolution, seed, refImage, strength, negative, promptBoost, activeTools, model]);
+  }, [generating, mode, prompt, assetType, artStyle, genre, subject, steps, cfg, sampler, negative, promptBoost]);
 
   function toggleTool(id) {
     setActiveTools(prev => {
@@ -286,18 +232,14 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
     cancelRef.current = false;
     setGenerating(true);
     onGeneratingChange?.(true);
-    setProgress('Sending to ComfyUI…');
+    setProgress('Forging…');
     const res = RESOLUTIONS[resolution];
-
-    // Build pro tool prompt additions
-    const proPromptParts = [...activeTools].map(id => PRO_TOOLS.find(t => t.id === id)?.promptAdd).filter(Boolean);
-    const proNegParts    = [...activeTools].map(id => PRO_TOOLS.find(t => t.id === id)?.negAdd).filter(Boolean);
 
     try {
       const form = new FormData();
       form.append('mode',           'preset');
-      form.append('prompt',         [prompt, promptBoost, ...proPromptParts].filter(Boolean).join(', '));
-      form.append('negativePrompt', [negative, ...proNegParts].filter(Boolean).join(', '));
+      form.append('prompt',         [prompt, promptBoost].filter(Boolean).join(', '));
+      form.append('negativePrompt', negative);
       form.append('assetType',      assetType);
       form.append('artStyle',       artStyle);
       form.append('genre',          genre);
@@ -427,7 +369,20 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
         <div className="flex flex-col gap-4">
           {/* ── UNIFIED PROMPT BUILDER ── */}
           <div>
-            <label className="block text-[11px] font-semibold text-brand-400 uppercase tracking-wider mb-2">Subject & Negative</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[11px] font-semibold text-brand-400 uppercase tracking-wider">Subject & Negative</label>
+              <button
+                onClick={onToggleTinker}
+                title="Tinker Mode: bypass smelt quality gate — send any image straight to MasterForge"
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                  tinkerMode
+                    ? 'bg-yellow-500/20 border-yellow-500/60 text-yellow-400'
+                    : 'bg-surface-700/50 border-surface-600/40 text-slate-500 hover:text-slate-300 hover:border-slate-500/60'
+                }`}
+              >
+                ⚙ Tinker
+              </button>
+            </div>
             <div className="relative rounded-lg border-2 border-brand-500/60 bg-surface-800 overflow-hidden">
               {/* Subject area (70%) */}
               <textarea
@@ -458,6 +413,23 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
                 style={{ height: '30%', minHeight: '60px', color: '#ff4d00' }}
               />
             </div>
+          </div>
+
+          {/* ── RESOLUTION BAR ── */}
+          <div className="flex items-center gap-1.5 overflow-x-auto res-scrollbar py-1">
+            {RESOLUTIONS.map((r, i) => (
+              <button
+                key={i}
+                onClick={() => setResolution(i)}
+                className={`shrink-0 px-2.5 py-1 rounded text-[10px] font-bold border transition-all ${
+                  resolution === i
+                    ? 'border-brand-500 bg-brand-600/30 text-brand-200'
+                    : 'border-surface-700/40 text-slate-500 hover:border-surface-600 hover:text-slate-300 bg-surface-800/10'
+                }`}
+              >
+                {r.label.replace(' × ', '×')}
+              </button>
+            ))}
           </div>
 
           {/* ── REFERENCE IMAGE ── */}
@@ -501,6 +473,8 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
                   {ASSET_TYPES.map(t => (
                     <button key={t.id} onClick={() => setAssetType(t.id)}
                       className={`px-1.5 py-1.5 rounded-lg text-[10px] font-medium border transition-all ${
+                        t.id === 'concept' ? 'col-span-3 py-2 text-xs' : ''
+                      } ${
                         assetType === t.id
                           ? 'border-brand-500/70 bg-brand-600/20 text-brand-300'
                           : 'border-surface-600/50 text-slate-400 hover:border-surface-500 hover:text-slate-200'
@@ -565,61 +539,14 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
             className="flex items-center gap-2 text-[11px] font-semibold text-brand-400 hover:text-brand-300 uppercase tracking-wider transition-colors w-full">
             <span className={`transition-transform duration-150 text-[9px] ${showPro ? 'rotate-90' : ''}`}>▶</span>
             Pro Tools
-            {activeTools.size > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 bg-brand-600/30 border border-brand-500/40 rounded text-[9px] text-brand-400 font-bold">
-                {activeTools.size} active
-              </span>
-            )}
-          </button>
-
-          {showPro && (
-            <div className="mt-3 grid grid-cols-2 gap-1.5">
-              {PRO_TOOLS.map(tool => (
-                <button key={tool.id} onClick={() => toggleTool(tool.id)}
-                  title={tool.desc}
-                  className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[10px] font-medium border transition-all text-left ${
-                    activeTools.has(tool.id)
-                      ? 'border-brand-500/70 bg-brand-600/20 text-brand-300'
-                      : 'border-surface-600/50 text-slate-400 hover:border-surface-500 hover:text-slate-200 bg-surface-800/40'
-                  }`}>
-                  <span className="text-[11px] shrink-0">{tool.icon}</span>
-                  <span className="leading-tight">{tool.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── ADVANCED ── */}
-        <div>
-          <button onClick={() => setShowAdv(v => !v)}
-            className="flex items-center gap-2 text-[11px] font-semibold text-brand-400 hover:text-brand-300 uppercase tracking-wider transition-colors w-full">
-            <span className={`transition-transform duration-150 text-[9px] ${showAdv ? 'rotate-90' : ''}`}>▶</span>
-            Advanced
             <span className="ml-auto text-slate-600 font-mono normal-case tracking-normal font-normal text-[10px]">
-              {steps}st · CFG {cfg} · {RESOLUTIONS[resolution].w}×{RESOLUTIONS[resolution].h}
+              {steps}st · CFG {cfg}
             </span>
           </button>
 
-          {showAdv && (
-            <div className="mt-3 flex flex-col gap-4 pl-3 border-l-2 border-surface-700/60">
-              {/* Resolution */}
-              <div>
-                <label className="block text-[10px] text-slate-500 mb-1.5 uppercase tracking-wider">Resolution</label>
-                <div className="grid grid-cols-2 gap-1">
-                  {RESOLUTIONS.map((r, i) => (
-                    <button key={i} onClick={() => setResolution(i)}
-                      className={`px-2 py-1.5 rounded-lg text-[10px] border transition-all ${
-                        resolution === i
-                          ? 'border-brand-500/70 bg-brand-600/15 text-brand-300'
-                          : 'border-surface-600/50 text-slate-500 hover:border-surface-500 hover:text-slate-300'
-                      }`}>
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
+          {showPro && (
+            <div className="mt-3 flex flex-col gap-4 pl-3 border-l-2 border-brand-500/40">
+              
               {/* Steps */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
@@ -658,17 +585,6 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
                   className="w-full accent-brand-500" />
               </div>
 
-              {/* Model */}
-              {models.length > 0 && (
-                <div>
-                  <label className="block text-[10px] text-slate-500 mb-1.5 uppercase tracking-wider">Model</label>
-                  <select value={model} onChange={e => setModel(e.target.value)}
-                    className="input-field text-xs">
-                    {models.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-              )}
-
               {/* Sampler */}
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
@@ -681,22 +597,13 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
                   </div>
                 </div>
                 <select value={sampler} onChange={e => setSampler(e.target.value)}
-                  className="input-field text-xs">
+                  className="input-field text-xs bg-surface-800 border-surface-600 text-slate-300">
                   {SAMPLERS.map(s => (
-                    <option key={s.id} value={s.id}>{s.label} &mdash; {s.desc}</option>
+                    <option key={s.id} value={s.id}>{s.label}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Seed */}
-              <div>
-                <label className="block text-[10px] text-slate-500 mb-1.5 uppercase tracking-wider">
-                  Seed <span className="normal-case text-slate-600">(blank = random)</span>
-                </label>
-                <input type="number" value={seed} onChange={e => setSeed(e.target.value)}
-                  placeholder="random"
-                  className="input-field text-xs" />
-              </div>
             </div>
           )}
         </div>
@@ -714,26 +621,13 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
 
       {/* ── Generate button — always visible ── */}
       <div className="shrink-0 px-4 py-3 border-t border-surface-700/60 bg-surface-800">
-        {activeTools.size > 0 && !generating && (
-          <div className="flex flex-wrap gap-1 mb-2">
-            {[...activeTools].map(id => {
-              const tool = PRO_TOOLS.find(t => t.id === id);
-              return tool ? (
-                <span key={id} className="flex items-center gap-1 px-1.5 py-0.5 bg-brand-900/40 border border-brand-700/40 rounded text-[9px] text-brand-400">
-                  {tool.icon} {tool.label}
-                  <button onClick={() => toggleTool(id)} className="text-brand-600 hover:text-brand-300 ml-0.5">✕</button>
-                </span>
-              ) : null;
-            })}
-          </div>
-        )}
         {generating ? (
           <div className="flex gap-2">
             <div className="flex-1 py-3 rounded-xl bg-surface-700/60 flex items-center justify-center gap-2 text-sm text-slate-400">
               <svg className="w-3.5 h-3.5 animate-spin shrink-0" viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="40 20" />
               </svg>
-              <span className="truncate text-xs">{progress || 'Generating…'}</span>
+              <span className="truncate text-xs">{progress || 'Forging…'}</span>
             </div>
             <button onClick={handleCancel}
               className="px-4 py-3 rounded-xl bg-red-900/40 hover:bg-red-800/60 border border-red-800/40 text-red-400 text-xs font-semibold transition-all">
@@ -750,7 +644,7 @@ export default function GenerationPanel({ onGenerated, reuseSettings, onReuseCon
                 ? 'bg-gradient-to-r from-brand-700 to-brand-500 hover:from-brand-600 hover:to-brand-400 text-white shadow-lg shadow-brand-900/40 active:scale-[0.98]'
                 : 'bg-surface-700/60 text-slate-600 cursor-not-allowed'
             }`}>
-            ✦ Generate
+            ✦ Forge
           </button>
         )}
       </div>

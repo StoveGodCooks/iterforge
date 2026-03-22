@@ -229,7 +229,7 @@ export default function SettingsPanel({ models = [], defaultModel = '', onRestar
           </div>
           {gpuMode === 'cloud' && (
             <div className="mb-2">
-              <p className="text-[10px] text-slate-500 mb-1">Cloud ComfyUI URL (e.g. serveo / cloudflare tunnel):</p>
+              <p className="text-[10px] text-slate-500 mb-1">Cloud Inter-Forge URL (e.g. serveo / cloudflare tunnel):</p>
               <input
                 type="text"
                 value={cloudUrl}
@@ -248,7 +248,7 @@ export default function SettingsPanel({ models = [], defaultModel = '', onRestar
             {gpuSaved ? '✓ Saved' : gpuSaving ? 'Saving…' : 'Apply'}
           </button>
           <p className="text-[10px] text-slate-600 mt-1">
-            {gpuMode === 'local' ? 'Using local ComfyUI on 127.0.0.1:8188' : 'Generations run on cloud GPU — meshing still local'}
+            {gpuMode === 'local' ? 'Using local Inter-Forge on 127.0.0.1:8188' : 'Generations run on cloud GPU — meshing still local'}
           </p>
         </Section>
 
@@ -302,20 +302,13 @@ export default function SettingsPanel({ models = [], defaultModel = '', onRestar
           <Section title="System Status" icon="⚙">
             <div className="flex flex-col gap-1.5">
               <StatusRow label="Server" value={statusInfo.server === 'ok' ? 'Running' : statusInfo.server} ok={statusInfo.server === 'ok'} />
-              <StatusRow label="ComfyUI" value={statusInfo.comfyui === 'ok' ? 'Connected' : statusInfo.comfyui === 'offline' ? 'Offline' : statusInfo.comfyui} ok={statusInfo.comfyui === 'ok'} />
+              <StatusRow label="Inter-Forge" value={statusInfo.comfyui === 'ok' ? 'Connected' : statusInfo.comfyui === 'offline' ? 'Offline' : statusInfo.comfyui} ok={statusInfo.comfyui === 'ok'} />
               <StatusRow
                 label="Blender"
                 value={statusInfo.blenderInstalled
                   ? `v${statusInfo.blenderVersion ?? '4.2'} — managed`
                   : 'Not installed — run Setup'}
                 ok={statusInfo.blenderInstalled}
-              />
-              <StatusRow
-                label="Inkscape"
-                value={statusInfo.inkscapeInstalled
-                  ? `v${statusInfo.inkscapeVersion ?? '1.4'} — managed`
-                  : 'Not installed — run Setup'}
-                ok={statusInfo.inkscapeInstalled}
               />
               {statusInfo.setup && (
                 <StatusRow label="Setup" value={statusInfo.setup.message ?? statusInfo.setup.state} ok={statusInfo.setup.state === 'done'} />
@@ -328,7 +321,7 @@ export default function SettingsPanel({ models = [], defaultModel = '', onRestar
         <Section title="About" icon="ℹ">
           <div className="flex flex-col gap-1 text-[10px]">
             <Row label="Version" value={VERSION} />
-            <Row label="Engine" value="ComfyUI + Juggernaut XL v9" />
+            <Row label="Engine" value="Inter-Forge + Juggernaut XL v9" />
             <Row label="Renderer" value="Sharp (sprite sheet compositing)" />
             <Row label="Frontend" value="React + Tailwind CSS" />
           </div>

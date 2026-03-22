@@ -6,10 +6,21 @@ import PreviewArea       from './components/PreviewArea.jsx';
 import StatusBar         from './components/StatusBar.jsx';
 import TutorialOverlay   from './components/TutorialOverlay.jsx';
 import MasterForgePanel  from './components/MasterForgePanel.jsx';
+import SmeltingPanel     from './components/SmeltingPanel.jsx';
 
 export default function App() {
-  const [mainTab,         setMainTab]         = useState('forge');          // 'forge' | 'masterforge'
+  const [mainTab,         setMainTab]         = useState('forge');          // 'forge' | 'smelting' | 'masterforge'
   const [currentImage,    setCurrentImage]    = useState(null);
+  
+  // Phase 2 Multiview State
+  const [lockedAsset,     setLockedAsset]     = useState(null);
+  const [smeltedViews,    setSmeltedViews]    = useState({ front: null, left: null, right: null, back: null });
+  const [outputChoice,    setOutputChoice]    = useState(null); // 'mesh' | 'spriteSheet'
+
+  const canProceedToMasterForge = tinkerMode
+    ? !!lockedAsset
+    : !!(smeltedViews.front && smeltedViews.left && smeltedViews.right);
+
   const [history,         setHistory]         = useState([]);
   const [historyLoading,  setHistoryLoading]  = useState(true);
   const [status,          setStatus]          = useState({ server: '…', comfyui: '…', comfyStarting: false });
@@ -19,6 +30,8 @@ export default function App() {
   const [reuseSettings,   setReuseSettings]   = useState(null);
   const [appCursor,       setAppCursor]       = useState('default');
   const [showTutorial,    setShowTutorial]    = useState(false);
+  const [anvilOpen,       setAnvilOpen]       = useState(false);
+  const [tinkerMode,      setTinkerMode]      = useState(false);
   const pollRef     = useRef(null);
   const intervalRef = useRef(null);
 
@@ -75,8 +88,12 @@ export default function App() {
             const prevIds = new Set(prev.map(e => e.id));
             const fresh = incoming.filter(e => !prevIds.has(e.id));
             if (!fresh.length) return prev;
+            // Only auto-select if nothing is currently shown
             setCurrentImage(cur => cur ?? fresh[0]);
-            return [...fresh, ...prev].slice(0, 100);
+            const merged = [...fresh, ...prev];
+            // deduplicate by id (handles onGenerated race)
+            const seen = new Set();
+            return merged.filter(e => seen.has(e.id) ? false : seen.add(e.id)).slice(0, 100);
           });
         })
         .catch(() => {});
@@ -102,7 +119,10 @@ export default function App() {
 
   function onGenerated(entry) {
     setCurrentImage(entry);
-    setHistory(h => [entry, ...h].slice(0, 100));
+    setHistory(h => {
+      if (h.some(e => e.id === entry.id)) return h; // already added by poll
+      return [entry, ...h].slice(0, 100);
+    });
   }
 
   function handleReuseSettings(entry) {
@@ -110,9 +130,13 @@ export default function App() {
     setReuseSettings(entry);
   }
 
-  // "Forge This →" — switch to MasterForge tab with current image
-  function handleForgeThis() {
-    setMainTab('masterforge');
+  // "Forge This →" — switch to Smelting tab with current image
+  function handleForgeThis(entry = null) {
+    const asset = entry || currentImage;
+    if (asset) {
+      setLockedAsset(asset);
+      setMainTab('smelting');
+    }
   }
 
   return (
@@ -144,6 +168,12 @@ export default function App() {
             className={`forge-tab ${mainTab === 'forge' ? 'active' : ''}`}
           >
             ✦ Forge
+          </button>
+          <button
+            onClick={() => setMainTab('smelting')}
+            className={`forge-tab ${mainTab === 'smelting' ? 'active' : ''}`}
+          >
+            ♨ Smelting
           </button>
           <button
             onClick={() => setMainTab('masterforge')}
@@ -180,13 +210,6 @@ export default function App() {
                   Single
                 </button>
                 <button
-                  id="tab-sheet"
-                  onClick={() => setSidebarTab('sheet')}
-                  className={`pill-tab ${sidebarTab === 'sheet' ? 'active' : ''}`}
-                >
-                  Sheet
-                </button>
-                <button
                   id="tab-settings"
                   onClick={() => setSidebarTab('settings')}
                   className={`pill-tab ${sidebarTab === 'settings' ? 'active' : ''}`}
@@ -202,14 +225,15 @@ export default function App() {
                       reuseSettings={reuseSettings}
                       onReuseConsumed={() => setReuseSettings(null)}
                       onGeneratingChange={gen => setAppCursor(gen ? 'generating' : 'default')}
+                      onOpenAnvil={() => setAnvilOpen(true)}
+                      tinkerMode={tinkerMode}
+                      onToggleTinker={() => setTinkerMode(t => !t)}
                     />
-                  : sidebarTab === 'sheet'
-                    ? <SpriteSheetPanel onGenerated={onGenerated} models={models} defaultModel={defaultModel} />
-                    : <SettingsPanel
-                        models={models}
-                        defaultModel={defaultModel}
-                        onRestartTutorial={() => setShowTutorial(true)}
-                      />
+                  : <SettingsPanel
+                      models={models}
+                      defaultModel={defaultModel}
+                      onRestartTutorial={() => setShowTutorial(true)}
+                    />
                 }
               </div>
             </aside>
@@ -220,22 +244,53 @@ export default function App() {
                 currentImage={currentImage}
                 history={history}
                 historyLoading={historyLoading}
+                lockedAsset={lockedAsset}
                 onSelect={setCurrentImage}
-                onDelete={(id) => setHistory(h => h.filter(e => e.id !== id))}
+                onDelete={(id) => {
+                  setHistory(h => {
+                    const next = h.filter(e => e.id !== id);
+                    // If the deleted item was being viewed, select the next one or clear
+                    setCurrentImage(cur => {
+                      if (cur?.id !== id) return cur;
+                      return next[0] ?? null;
+                    });
+                    return next;
+                  });
+                }}
                 onReuseSettings={handleReuseSettings}
                 onGenerated={onGenerated}
                 onOpenSettings={() => setSidebarTab('settings')}
                 onCursorChange={setAppCursor}
                 onForgeThis={handleForgeThis}
+                onLockAsset={setLockedAsset}
+                anvilOpen={anvilOpen}
+                onCloseAnvil={() => setAnvilOpen(false)}
+                onOpenAnvil={() => setAnvilOpen(true)}
               />
             </main>
           </div>
         )}
 
+        {/* ── SMELTING TAB ──────────────────────────────────────────────────── */}
+        {mainTab === 'smelting' && (
+          <SmeltingPanel
+            lockedAsset={lockedAsset}
+            smeltedViews={smeltedViews}
+            onUpdateViews={setSmeltedViews}
+            canProceed={canProceedToMasterForge}
+            onProceed={() => canProceedToMasterForge && setMainTab('masterforge')}
+            onChangeSource={() => setMainTab('forge')}
+            tinkerMode={tinkerMode}
+          />
+        )}
+
         {/* ── MASTERFORGE TAB ───────────────────────────────────────────────── */}
         {mainTab === 'masterforge' && (
           <MasterForgePanel
-            sourceImage={currentImage}
+            sourceImage={lockedAsset}
+            smeltedViews={smeltedViews}
+            outputChoice={outputChoice}
+            onOutputChoiceChange={setOutputChoice}
             onGenerated={onGenerated}
           />
         )}

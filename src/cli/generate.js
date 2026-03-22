@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { ContextManager } from '../context/manager.js';
 import { PromptEngine } from '../prompts/engine.js';
-import { generate as routerGenerate } from '../backends/router.js';
+import { generate as comfyGenerate } from '../backends/comfyui.js';
 import { verifyModel } from '../backends/comfyui.js';
 
 const PRESET_TYPES = ['arena', 'card'];

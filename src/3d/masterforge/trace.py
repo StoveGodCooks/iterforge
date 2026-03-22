@@ -22,13 +22,18 @@ def trace_svg(svg_path: str):
         import cadquery as cq
         # Import SVG as a set of wires
         result = cq.importers.importSVG(svg_path)
-        # Get the first wire (the main silhouette)
-        # AI-generated SVGs usually have one main path for the weapon
         wires = result.wires().vals()
         if not wires:
             raise RuntimeError('No paths found in SVG')
         
-        main_wire = wires[0]
+        # Select the largest wire by bounding box area (the main silhouette)
+        # This prevents picking up tiny detail paths inside the sword.
+        def _area(w):
+            bb = w.BoundingBox()
+            return (bb.xmax - bb.xmin) * (bb.ymax - bb.ymin)
+            
+        main_wire = max(wires, key=_area)
+        
         # Discretize the wire into high-precision points (300 points)
         pts = [(float(p.x), float(p.y)) for p in main_wire.discretize(300)]
         print(f'[masterforge.trace] SVG numerical paths: {len(pts)} pts')
@@ -109,14 +114,22 @@ def trace_contour(mask: np.ndarray):
 
     rotated = _rot(pts, rot, float(centroid[0]), float(centroid[1]))
 
-    # -- Tip-up flip: wider end = pommel/base, goes to -Y ---------------------
-    ry = np.array([(x - centroid[0]) * math.sin(rot) +
-                   (y - centroid[1]) * math.cos(rot) + centroid[1]
-                   for x, y in zip(xs_fg.astype(float), ys_fg.astype(float))])
-    if (ry < float(ry.mean())).sum() > (ry >= float(ry.mean())).sum():
+    # -- Tip-up flip: heavier/wider end = pommel/base, goes to -Y ----------------
+    # Transform all foreground pixels into rotated space to check mass distribution
+    ca, sa = math.cos(rot), math.sin(rot)
+    ry_fg = np.array([
+        (x - centroid[0]) * sa + (y - centroid[1]) * ca + centroid[1]
+        for x, y in zip(xs_fg.astype(float), ys_fg.astype(float))
+    ])
+    
+    mid_y = float(ry_fg.mean())
+    mass_bottom = (ry_fg < mid_y).sum()
+    mass_top    = (ry_fg >= mid_y).sum()
+    
+    if mass_top > mass_bottom:
         rotated = _rot(rotated, math.pi,
                        float(centroid[0]), float(centroid[1]))
-        print('[masterforge.trace] flipped 180 (tip-up)')
+        print('[masterforge.trace] flipped 180 (tip-up based on mass)')
 
     # -- Normalise to [-1, 1] -------------------------------------------------
     rot_arr = np.array(rotated, dtype=np.float32)
@@ -139,25 +152,46 @@ def scanline_profile(contour: list, n_slices: int = 300) -> list:
     Scanline intersection of contour polygon.
     Returns list of [y, xl, xr] for each slice.
     """
+    if not contour:
+        return []
+
     arr   = np.array(contour, dtype=np.float32)
     y_min = float(arr[:, 1].min())
     y_max = float(arr[:, 1].max())
-    y_vals = np.linspace(y_min + 1e-4, y_max - 1e-4, n_slices).tolist()
+    
+    # Handle extremely flat objects
+    if abs(y_max - y_min) < 1e-4:
+        print(f"[masterforge.trace] WARNING: object is too flat (height={y_max-y_min:.6f})")
+        return []
+
+    # Use a small epsilon to avoid exact endpoint issues
+    y_vals = np.linspace(y_min + 1e-6, y_max - 1e-6, n_slices).tolist()
 
     n    = len(contour)
     rows = []
     for y in y_vals:
         xs = []
         for i in range(n):
-            x1, y1 = contour[i];  x2, y2 = contour[(i + 1) % n]
-            if y1 == y2:
+            p1 = contour[i]
+            p2 = contour[(i + 1) % n]
+            x1, y1 = p1[0], p1[1]
+            x2, y2 = p2[0], p2[1]
+            
+            if abs(y1 - y2) < 1e-9:
                 continue
             if not (min(y1, y2) <= y < max(y1, y2)):
                 continue
-            xs.append(x1 + (y - y1) / (y2 - y1) * (x2 - x1))
+                
+            # Linear interpolation for X intersection
+            intersect_x = x1 + (y - y1) / (y2 - y1) * (x2 - x1)
+            xs.append(intersect_x)
+            
         if len(xs) >= 2:
             rows.append([float(y), float(min(xs)), float(max(xs))])
 
+    if not rows:
+        print(f"[masterforge.trace] WARNING: scanline intersection produced 0 rows for {len(contour)} pts")
+        
     return rows
 
 
@@ -166,7 +200,11 @@ def smooth_profile(profile: list, sigma: float = 1.5) -> list:
     Gaussian smooth xl and xr columns of the scanline profile.
     Returns list of [y, xl_smoothed, xr_smoothed].
     """
+    if not profile:
+        return []
+
     def _smooth1d(arr):
+        if len(arr) < 3: return arr
         sz  = max(3, int(sigma * 4) | 1)
         ax  = np.arange(-(sz // 2), sz // 2 + 1, dtype=np.float32)
         k   = np.exp(-ax ** 2 / (2 * sigma ** 2)); k /= k.sum()

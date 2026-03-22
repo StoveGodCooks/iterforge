@@ -6,7 +6,8 @@ node_modules/
 dist/
 build/
 .claude/
-C:\Users\beebo\.gemini\tmp\
+.gemini/tmp/
+*.zip
 
 # Generated assets (user images — not committed)
 assets/iterforge/

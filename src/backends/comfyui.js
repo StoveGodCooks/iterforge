@@ -90,21 +90,32 @@ const POLL_TIMEOUT_MS = 300_000; // 5 min max
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function injectTokens(workflow, tokens) {
-  let json = JSON.stringify(workflow);
-  for (const [key, value] of Object.entries(tokens)) {
-    const quotedPattern = new RegExp(`"${key}"`, 'g');
-    const plainPattern  = new RegExp(key, 'g');
-    if (typeof value === 'number') {
-      json = json.replace(quotedPattern, String(value));
-    } else {
-      // JSON-encode the string so embedded quotes, newlines, and control chars
-      // don't break the surrounding JSON structure when injected.
-      const escaped = JSON.stringify(String(value)).slice(1, -1);
-      json = json.replace(plainPattern, escaped);
+/**
+ * Recursively inject tokens into a workflow object.
+ * Safe replacement that doesn't corrupt JSON structure.
+ */
+function injectTokens(obj, tokens) {
+  if (typeof obj === 'string') {
+    let result = obj;
+    for (const [key, value] of Object.entries(tokens)) {
+      if (result.includes(key)) {
+        // If the entire string is just the token, we can use the original type (e.g. number)
+        if (result === key) return value;
+        // Otherwise, it's a partial replacement in a larger string
+        result = result.replace(new RegExp(key, 'g'), String(value));
+      }
     }
+    return result;
+  } else if (Array.isArray(obj)) {
+    return obj.map(item => injectTokens(item, tokens));
+  } else if (obj !== null && typeof obj === 'object') {
+    const newObj = {};
+    for (const key in obj) {
+      newObj[key] = injectTokens(obj[key], tokens);
+    }
+    return newObj;
   }
-  return JSON.parse(json);
+  return obj;
 }
 
 async function get(endpoint) {
@@ -141,8 +152,6 @@ async function detectCheckpoint() {
 
 /**
  * Detect whether a model is a distilled Lightning/Turbo/LCM model.
- * These models require low steps (4-10) and low CFG (1.5-2.5).
- * Standard SDXL models (Juggernaut, RealVis, etc.) need 20-30 steps and CFG 4-7.
  */
 export function isLightningModel(modelName) {
   const n = (modelName ?? '').toLowerCase();
@@ -151,20 +160,16 @@ export function isLightningModel(modelName) {
 
 /**
  * Return sane generation defaults for a given checkpoint.
- * Callers can override any value — these are applied only when the caller
- * passes the original user value (steps/cfg) from the UI.
  */
 export function modelDefaults(modelName) {
   if (isLightningModel(modelName)) {
     return { steps: 8, cfg: 2.0, sampler: 'euler', scheduler: 'sgm_uniform' };
   }
-  // Standard full-quality SDXL (Juggernaut XL, RealVisXL, etc.)
   return { steps: 25, cfg: 5.5, sampler: 'dpmpp_2m_sde', scheduler: 'karras' };
 }
 
 /**
  * Upload a local image file to ComfyUI's input folder.
- * Returns the filename ComfyUI assigned to it.
  */
 async function uploadImage(localPath) {
   if (!(await fs.pathExists(localPath))) {
@@ -184,7 +189,7 @@ async function uploadImage(localPath) {
   });
   if (!res.ok) throw new Error(`Failed to upload reference image: ${res.status}`);
   const data = await res.json();
-  return data.name; // ComfyUI returns { name, subfolder, type }
+  return data.name;
 }
 
 /** Poll until the prompt completes and return the output image. */
@@ -231,34 +236,13 @@ export async function healthCheck() {
   }
 }
 
-/** Verify at least one model checkpoint is installed. */
 export async function verifyModel() {
-  await detectCheckpoint(); // throws if none found
+  await detectCheckpoint();
   return true;
 }
 
 /**
  * Generate an image via ComfyUI.
- *
- * @param {object} opts
- * @param {string}  opts.type          - workflow type ('arena'|'card'|'custom')
- * @param {string}  opts.positive      - positive prompt
- * @param {string}  opts.negative      - negative prompt
- * @param {number}  opts.steps         - inference steps (default 30)
- * @param {number}  opts.cfg           - CFG scale (default 7.0)
- * @param {number}  opts.seed          - seed (default random)
- * @param {number}  opts.width         - output width (default 1024)
- * @param {number}  opts.height        - output height (default 1024)
- * @param {string}  opts.outputDir     - where to save the PNG
- * @param {string}  [opts.model]       - checkpoint filename (auto-detected if omitted)
- * @param {string}  [opts.referencePath]      - local path to reference image (enables img2img)
- * @param {number}  [opts.strength]           - img2img denoise strength 0-1 (default 0.75)
- * @param {string}  [opts.sampler]            - sampler override
- * @param {string}  [opts.controlnetType]     - 'openpose'|'canny'|'depth' (enables ControlNet)
- * @param {string}  [opts.controlnetImage]    - local path to ControlNet guide image
- * @param {number}  [opts.controlnetStrength] - ControlNet influence 0-1 (uses type default)
- * @param {number}  [opts.upscaleFactor]      - run upscale pass after generation (2 or 4)
- * @returns {{ imagePath: string, seed: number, backend: string }}
  */
 export async function generate(opts) {
   const {
@@ -279,51 +263,38 @@ export async function generate(opts) {
     controlnetType = null,
     controlnetImage = null,
     controlnetStrength = null,
+    ipadapterWeight = null,
   } = opts;
 
-  // Resolve checkpoint and detect model type
   const ckptName = model ?? await detectCheckpoint();
   const mDefaults = modelDefaults(ckptName);
 
-  // Auto-clamp steps and CFG to sane ranges for the detected model type.
-  // For Lightning: cap at 10 steps / 2.5 CFG even if the preset asked for more.
-  // For standard SDXL: use the preset/user value as-is (already validated upstream).
-  const effectiveSteps = isLightningModel(ckptName)
-    ? Math.min(steps, 10)
-    : steps;
-  const effectiveCfg = isLightningModel(ckptName)
-    ? Math.min(cfg, 2.5)
-    : cfg;
+  const effectiveSteps = isLightningModel(ckptName) ? Math.min(steps, 10) : steps;
+  const effectiveCfg   = isLightningModel(ckptName) ? Math.min(cfg, 2.5) : cfg;
   const effectiveSampler  = sampler  || mDefaults.sampler;
   const effectiveScheduler = mDefaults.scheduler;
 
-  // Determine workflow file
-  // Priority: ControlNet → IP-Adapter sprite → img2img → txt2img
   let workflowFile;
   let useIPAdapter = false;
   let useControlNet = false;
 
-  if (controlnetType && controlnetImage) {
-    // ControlNet requested — check if models are installed
+  if (type === 'smelt') {
+    workflowFile = path.join(WORKFLOWS_DIR, 'smelt-multiview-sdxl.json');
+  } else if (controlnetType && controlnetImage) {
     const cnReady = await isControlNetAvailable(controlnetType);
     if (cnReady) {
       workflowFile = path.join(WORKFLOWS_DIR, `txt2img-${controlnetType}-sdxl.json`);
       useControlNet = true;
-      console.log(`[ComfyUI] Using ControlNet workflow: ${controlnetType}`);
     } else {
-      console.warn(`[ComfyUI] ControlNet ${controlnetType} not ready — falling back to txt2img`);
       workflowFile = path.join(WORKFLOWS_DIR, 'txt2img-sdxl.json');
     }
   } else if (referencePath && type === 'sprite') {
-    // Sprite frames with a reference: prefer IP-Adapter for character identity lock
     const ipAdapterReady = await isIPAdapterAvailable();
     if (ipAdapterReady) {
       workflowFile = path.join(WORKFLOWS_DIR, 'sprite-ipadapter-sdxl.json');
       useIPAdapter = true;
-      console.log('[ComfyUI] Using IP-Adapter workflow for sprite frame');
     } else {
       workflowFile = path.join(WORKFLOWS_DIR, 'img2img-sdxl.json');
-      console.log('[ComfyUI] IP-Adapter not ready yet — falling back to img2img');
     }
   } else if (referencePath) {
     workflowFile = path.join(WORKFLOWS_DIR, 'img2img-sdxl.json');
@@ -338,7 +309,6 @@ export async function generate(opts) {
   }
   const template = await fs.readJson(workflowFile);
 
-  // Resolve LoRA: prefer explicitly passed name (from preset), fall back to first available
   const loraDir = path.join(ITERFORGE_HOME, 'comfyui', 'models', 'loras');
   let loraName = null;
   try {
@@ -347,70 +317,69 @@ export async function generate(opts) {
       const n = f.toLowerCase();
       return (n.endsWith('.safetensors') || n.endsWith('.pt')) && !n.includes('put_');
     });
-    if (explicitLora && available.includes(explicitLora)) {
-      loraName = explicitLora;                  // preset-specified LoRA found
-    } else if (explicitLora) {
-      console.warn(`[ComfyUI] Preset LoRA "${explicitLora}" not found in loras folder — skipping`);
-    } else {
-      loraName = available[0] ?? null;          // fallback: first available
-    }
-  } catch { /* lora dir missing — skip */ }
+    if (explicitLora && available.includes(explicitLora)) loraName = explicitLora;
+    // No auto-fallback — only use a LoRA when explicitly requested by the preset.
+    // Auto-selecting available[0] was causing random LoRAs (e.g. HearthstoneCard)
+    // to fire on asset types that don't request any LoRA.
+  } catch { /* skip */ }
 
-  // Build token map — use effective (model-aware) steps/cfg/sampler
   const tokens = {
     __CKPT_NAME__:       ckptName,
     __PROMPT_POSITIVE__: positive,
     __PROMPT_NEGATIVE__: negative,
-    __STEPS__:  effectiveSteps,
-    __CFG__:    effectiveCfg,
-    __SEED__:   seed,
-    __WIDTH__:  width,
-    __HEIGHT__: height,
+    __STEPS__:           effectiveSteps,
+    __CFG__:             effectiveCfg,
+    __SEED__:            seed,
+    __WIDTH__:           width,
+    __HEIGHT__:          height,
     __LORA_NAME__:       loraName ?? 'none',
     __LORA_STRENGTH__:   loraName ? 0.75 : 0.0,
-    __IPADAPTER_WEIGHT__: 0.55,  // 0.55 = strong identity lock while allowing pose variation
+    __IPADAPTER_WEIGHT__: ipadapterWeight ?? 0.55,
     __UPSCALE_MODEL__:   UPSCALE_MODEL,
     __UPSCALE_FACTOR__:  2,
   };
 
   if (referencePath) {
-    const refFilename = await uploadImage(referencePath);
-    tokens.__REFERENCE_IMAGE__ = refFilename;
+    tokens.__REFERENCE_IMAGE__ = await uploadImage(referencePath);
     tokens.__STRENGTH__ = strength;
   }
 
   if (useControlNet && controlnetImage) {
-    const cnFilename = await uploadImage(controlnetImage);
-    tokens.__CONTROLNET_IMAGE__    = cnFilename;
+    tokens.__CONTROLNET_IMAGE__    = await uploadImage(controlnetImage);
     tokens.__CONTROLNET_MODEL__    = CONTROLNET_MODELS[controlnetType];
     tokens.__CONTROLNET_STRENGTH__ = controlnetStrength ?? CONTROLNET_DEFAULTS[controlnetType] ?? 0.75;
   }
 
-  // Apply sampler override if provided
+  // 1. Inject tokens safely
   let workflow = injectTokens(template, tokens);
 
-  // If no LoRA is available, bypass node 8 — rewire nodes 2, 3, 5 directly to checkpoint (node 1)
+  // 2. Bypass LoRA node if none available (standardize on node 8)
   if (!loraName) {
-    const wf = workflow;
-    if (wf['8']) delete wf['8'];
-    if (wf['2']?.inputs?.clip?.[0] === '8') wf['2'].inputs.clip  = ['1', 1];
-    if (wf['3']?.inputs?.clip?.[0] === '8') wf['3'].inputs.clip  = ['1', 1];
-    if (wf['5']?.inputs?.model?.[0] === '8') wf['5'].inputs.model = ['1', 0];
-    workflow = wf;
+    const nodesToRewire = Object.values(workflow);
+    for (const node of nodesToRewire) {
+      if (!node.inputs) continue;
+      for (const key in node.inputs) {
+        const link = node.inputs[key];
+        if (Array.isArray(link) && link[0] === '8') {
+          // Rewire to CheckpointLoader (Node 1)
+          node.inputs[key] = ['1', link[1]]; 
+        }
+      }
+    }
+    delete workflow['8'];
   }
 
-  // Apply effective sampler and scheduler (model-aware)
-  {
-    let json = JSON.stringify(workflow);
-    json = json.replace(/"sampler_name":"[^"]+"/g,  `"sampler_name":"${effectiveSampler}"`);
-    json = json.replace(/"scheduler":"[^"]+"/g,      `"scheduler":"${effectiveScheduler}"`);
-    workflow = JSON.parse(json);
-  }
+  // 3. Set sampler/scheduler (some samplers are nested in nodes)
+  const setNested = (obj) => {
+    if (obj !== null && typeof obj === 'object') {
+      if (obj.sampler_name !== undefined) obj.sampler_name = effectiveSampler;
+      if (obj.scheduler !== undefined) obj.scheduler = effectiveScheduler;
+      for (const k in obj) setNested(obj[k]);
+    }
+  };
+  setNested(workflow);
 
-  // Submit
   const { prompt_id: promptId } = await post('/prompt', { prompt: workflow });
-
-  // Poll and save
   const imagePath = await pollAndSave(promptId, outputDir);
   return { imagePath, seed, backend: 'comfyui' };
 }

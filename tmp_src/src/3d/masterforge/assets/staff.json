@@ -1,0 +1,34 @@
+{
+  "type": "staff",
+  "n_slices": 300,
+  "min_depth": 0.020,
+  "min_width": 0.005,
+  "zones": {
+    "blade": {
+      "cross_section": "octagon",
+      "depth_ratio": 0.35
+    },
+    "tip": {
+      "width_threshold": 0.10,
+      "cross_section": "lenticular",
+      "depth_ratio": 0.40
+    },
+    "guard": {
+      "band": [0.40, 0.70],
+      "threshold": 0.55,
+      "relative_threshold": 0.70,
+      "cross_section": "octagon",
+      "depth_ratio": 0.40
+    },
+    "handle": {
+      "cross_section": "octagon",
+      "depth_ratio": 0.32
+    },
+    "pommel": {
+      "max_band": 0.15,
+      "handle_multiplier": 1.5,
+      "cross_section": "octagon",
+      "depth_ratio": 0.50
+    }
+  }
+}

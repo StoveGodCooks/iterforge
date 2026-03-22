@@ -90,6 +90,9 @@ function createWindow(port) {
 
   mainWindow.setMenuBarVisibility(false);
 
+  // Open DevTools immediately for debugging
+  mainWindow.webContents.openDevTools();
+
   // Show loading page immediately, then swap to the app once Express is ready
   mainWindow.loadURL(LOADING_HTML);
 

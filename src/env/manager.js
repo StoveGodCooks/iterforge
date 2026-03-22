@@ -25,12 +25,6 @@ const BLENDER_EXE     = path.join(BLENDER_DIR, 'blender.exe');
 const BLENDER_VERSION = '4.2.3';
 const BLENDER_URL     = `https://download.blender.org/release/Blender4.2/blender-${BLENDER_VERSION}-windows-x64.zip`;
 
-// Inkscape 1.4.3 — Windows x64 NSIS installer, silent install to AppData.
-// /S = silent, /D= sets install dir (must be absolute, no trailing slash).
-const INKSCAPE_DIR     = path.join(ITERFORGE_HOME, 'inkscape');
-const INKSCAPE_EXE     = path.join(INKSCAPE_DIR, 'bin', 'inkscape.exe');
-const INKSCAPE_VERSION = '1.4.3';
-const INKSCAPE_URL     = `https://inkscape.org/release/inkscape-${INKSCAPE_VERSION}/windows/64-bit/exe/dl/`;
 
 // ── Download & extract embeddable Python 3.11.9 (no installer needed) ────────
 async function downloadPython(spinner) {
@@ -98,7 +92,6 @@ export class EnvManager {
       const pythonExe = await this.ensurePython(spinner);
       await this.ensureComfyUI(spinner, pythonExe);
       await this.ensureBlender(spinner);
-      await this.ensureInkscape(spinner);
       await this.ensureTripoSR(spinner, pythonExe);
       spinner.succeed('Managed environment ready.');
       if (onProgress) onProgress('done');
@@ -298,78 +291,7 @@ export class EnvManager {
     return BLENDER_EXE;
   }
 
-  // ── Step 4: ensure Inkscape is installed ────────────────────────────────────
-  static async ensureInkscape(spinner) {
-    // Already in managed dir — done
-    if (await fs.pathExists(INKSCAPE_EXE)) {
-      await registerTool('inkscape', { path: INKSCAPE_EXE, version: INKSCAPE_VERSION, managed: true });
-      return INKSCAPE_EXE;
-    }
-
-    // Check common system install locations first — copy rather than re-download
-    const SYSTEM_INKSCAPE_CANDIDATES = [
-      'C:\\inkscape\\bin\\inkscape.exe',            // portable install at C:\inkscape
-      'C:\\Program Files\\Inkscape\\bin\\inkscape.exe',
-      'C:\\Program Files (x86)\\Inkscape\\bin\\inkscape.exe',
-    ];
-    let systemInkscapeDir = null;
-    for (const candidate of SYSTEM_INKSCAPE_CANDIDATES) {
-      if (await fs.pathExists(candidate)) {
-        systemInkscapeDir = path.dirname(path.dirname(candidate)); // bin/../ = root
-        break;
-      }
-    }
-
-    if (systemInkscapeDir) {
-      // Copy existing system installation into managed directory
-      spinner.text = `Copying Inkscape from ${systemInkscapeDir} (one-time)...`;
-      await fs.copy(systemInkscapeDir, INKSCAPE_DIR, { overwrite: true });
-    } else {
-      // No system install found — download the installer and run silently
-      const installerDest = path.join(ITERFORGE_HOME, 'inkscape-installer.exe');
-      spinner.text = `Downloading Inkscape ${INKSCAPE_VERSION} (~100 MB, one-time)...`;
-
-      const res = await fetch(INKSCAPE_URL, { redirect: 'follow' });
-      if (!res.ok) throw new Error(`Inkscape download failed: ${res.status} ${res.statusText}`);
-
-      const total = parseInt(res.headers.get('content-length') || '0', 10);
-      let received = 0;
-      const out = fs.createWriteStream(installerDest);
-
-      await new Promise((resolve, reject) => {
-        res.body.on('data', chunk => {
-          received += chunk.length;
-          if (total) {
-            const pct = ((received / total) * 100).toFixed(1);
-            spinner.text = `Downloading Inkscape ${INKSCAPE_VERSION}... ${pct}%`;
-          }
-        });
-        res.body.pipe(out);
-        res.body.on('error', reject);
-        out.on('finish', resolve);
-        out.on('error', reject);
-      });
-
-      // Silent NSIS install — /S silent, /D sets target dir (no quotes, no trailing slash)
-      spinner.text = 'Installing Inkscape (silent)...';
-      const winInstallDir = INKSCAPE_DIR.replace(/\//g, '\\');
-      execSync(`"${installerDest}" /S /D=${winInstallDir}`, {
-        stdio: 'ignore',
-        timeout: 300_000,
-      });
-      await fs.remove(installerDest).catch(() => {});
-    }
-
-    if (!(await fs.pathExists(INKSCAPE_EXE))) {
-      throw new Error('Inkscape setup failed — inkscape.exe not found after install');
-    }
-
-    spinner.text = `Inkscape ${INKSCAPE_VERSION} ready.`;
-    await registerTool('inkscape', { path: INKSCAPE_EXE, version: INKSCAPE_VERSION, managed: true });
-    return INKSCAPE_EXE;
-  }
-
-  // ── Step 5: download TripoSR deps + weights (~1 GB, MIT, one-time) ──────────
+  // ── Step 4: download TripoSR deps + weights (~1 GB, MIT, one-time) ──────────
   static async ensureTripoSR(spinner, pythonExe) {
     if (await fs.pathExists(TRIPOSR_MARKER)) return;   // already done
 

@@ -3,9 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 const STEPS = [
   { sel: null, title: '🎮 Welcome to Inter-Forge!', body: "Your AI game asset pipeline. Generate 2D images, edit them, and convert to 3D — all in one place. Let's take a quick tour.", tip: 'bottom-center' },
   { sel: '#tab-single', title: '✦ Single Generator', body: 'Pick an asset type, art style, and genre. Then describe what you want — or let the presets handle it.', tip: 'right' },
-  { sel: 'button.bg-brand-600.w-full', title: '⚡ Generate', body: 'Click Generate (or press Ctrl+Enter) to create your first asset. ComfyUI runs it locally — no cloud needed.', tip: 'right' },
+  { sel: 'button.bg-brand-600.w-full', title: '⚡ Generate', body: 'Click Generate (or press Ctrl+Enter) to create your first asset. Inter-Forge runs it locally — no cloud needed.', tip: 'right' },
   { sel: '[data-tutorial="preview-area"]', title: '🖼 Preview Area', body: 'Your generated image appears here. Click it to zoom in. Every generation is saved in the history strip on the right.', tip: 'bottom' },
-  { sel: '[data-tutorial="edit-image-btn"]', title: '✏ Edit Image', body: 'Rotate, flip, resize, paint on the image, or open it in the full Inkscape editor with live sync back to Inter-Forge.', tip: 'top' },
+  { sel: '[data-tutorial="edit-image-btn"]', title: '✏ Edit Image', body: 'Paint, draw, and edit your image inline — then feed it back into generation or into MasterForge.', tip: 'top' },
   { sel: '[data-tutorial="apply-mesh-btn"]', title: '⬡ Apply to 3D Mesh', body: 'Wrap your image onto a 3D mesh — plane, cube, cylinder, sphere, torus and more. Blender runs headless in the background.', tip: 'top' },
   { sel: '#tab-settings', title: '⚙ Settings & Diagnostics', body: "Check system status, run diagnostics, and configure paths here. You're all set — go make something great!", tip: 'right' },
 ];

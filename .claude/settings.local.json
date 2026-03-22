@@ -280,7 +280,10 @@
       "Bash(1 ls:*)",
       "Bash(node -e \"const d=JSON.parse\\(require\\(''''fs''''\\).readFileSync\\(''''/dev/stdin'''',''''utf8''''\\)\\); console.log\\(''''controlNet:'''', JSON.stringify\\(d.controlNet\\)\\); console.log\\(''''upscalerReady:'''', d.upscalerReady\\); console.log\\(''''ipAdapterReady:'''', d.ipAdapterReady\\);\")",
       "Bash(grep -v \"ITERFORGE_HOME\\\\|Roaming\\\\IterForge\\\\|python-base\\\\|#\\\\|//\")",
-      "Bash(head -20 grep -n \"apply.*mesh\\\\|applyMesh\\\\|Apply.*Mesh\" \"C:\\\\Users\\\\beebo\\\\OneDrive\\\\Desktop\\\\iterforge-prototype\\\\src\\\\server\\\\routes\\\\generation.js\")"
+      "Bash(head -20 grep -n \"apply.*mesh\\\\|applyMesh\\\\|Apply.*Mesh\" \"C:\\\\Users\\\\beebo\\\\OneDrive\\\\Desktop\\\\iterforge-prototype\\\\src\\\\server\\\\routes\\\\generation.js\")",
+      "Bash(\"C:\\\\Users\\\\beebo\\\\AppData\\\\Roaming\\\\IterForge\\\\python-base\\\\python.exe\" -m pip install shapely svgwrite lxml colorthief vtracer)",
+      "Bash(find /d -maxdepth 5 -type d -name \"custom_nodes\")",
+      "Bash(find /d -maxdepth 5 -type d -name \"ComfyUI\")"
     ]
   }
 }

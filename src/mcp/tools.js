@@ -72,7 +72,7 @@ async function pollUntilDone(endpoint, intervalMs = 2000, maxMs = 360_000) {
 const TOOLS = [
   {
     name: 'get_status',
-    description: 'Check the status of all Inter-Forge backends (ComfyUI, Blender, Inkscape).',
+    description: 'Check the status of all Inter-Forge backends (ComfyUI, Blender).',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -149,18 +149,6 @@ const TOOLS = [
       properties: {
         limit: { type: 'number', description: 'Max entries to return (default: all)' },
       },
-    },
-  },
-  {
-    name: 'inkscape_write_svg',
-    description: 'Write SVG content to disk in the Inter-Forge inkscape-work directory.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        description: { type: 'string', description: 'Short description used as filename slug' },
-        svgContent:  { type: 'string', description: 'Full SVG markup string' },
-      },
-      required: ['description', 'svgContent'],
     },
   },
   {
@@ -242,7 +230,7 @@ const TOOLS = [
   },
   {
     name: 'get_backend_status',
-    description: 'Check all Inter-Forge backend statuses: ComfyUI, Blender, Inkscape, Python, IP-Adapter, installed models. Returns { available: [...], tier, details }.',
+    description: 'Check all Inter-Forge backend statuses: ComfyUI, Blender, Python, IP-Adapter, installed models. Returns { available: [...], tier, details }.',
     inputSchema: { type: 'object', properties: {} },
   },
 ];
@@ -252,7 +240,7 @@ const TOOLS = [
 async function handleGetStatus() {
   try {
     const data = await apiGet('/api/status');
-    return ok({ comfyui: data.comfyui, blender: data.blenderInstalled ? 'installed' : 'not found', inkscape: data.inkscapeInstalled ? 'installed' : 'not found', server: data.server });
+    return ok({ comfyui: data.comfyui, blender: data.blenderInstalled ? 'installed' : 'not found', server: data.server });
   } catch (e) {
     return err(`Failed to reach server: ${e.message}`);
   }
@@ -395,21 +383,6 @@ async function handleGetHistory(args) {
     const generations = data.generations ?? [];
     const limited = args.limit ? generations.slice(0, args.limit) : generations;
     return ok({ generations: limited, total: data.total ?? generations.length });
-  } catch (e) {
-    return err(e.message);
-  }
-}
-
-async function handleInkscapeWriteSvg(args) {
-  try {
-    const { description, svgContent } = args;
-    const slug = description.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40).replace(/^_|_$/, '') || 'unnamed';
-    const dir  = path.join(ITERFORGE_HOME, 'inkscape-work');
-    await fs.ensureDir(dir);
-    const filename = `${slug}_${Date.now()}.svg`;
-    const svgPath  = path.join(dir, filename);
-    await fs.writeFile(svgPath, svgContent, 'utf8');
-    return ok({ svgPath, filename });
   } catch (e) {
     return err(e.message);
   }
@@ -601,7 +574,6 @@ async function handleGetBackendStatus() {
     const available = [];
     if (status.comfyui === 'ok')       available.push('comfyui');
     if (status.blenderInstalled)        available.push('blender');
-    if (status.inkscapeInstalled)       available.push('inkscape');
     if (status.ipAdapterReady)          available.push('ipadapter');
 
     return ok({
@@ -610,7 +582,6 @@ async function handleGetBackendStatus() {
       comfyui:          status.comfyui ?? 'unknown',
       comfyStarting:    status.comfyStarting ?? false,
       blender:          status.blenderInstalled ? (status.blenderVersion ?? 'installed') : 'not found',
-      inkscape:         status.inkscapeInstalled ? (status.inkscapeVersion ?? 'installed') : 'not found',
       ipAdapterReady:   status.ipAdapterReady ?? false,
       serverVersion:    status.version ?? null,
       details:          status,
@@ -641,7 +612,6 @@ export function createMcpServer() {
         case 'apply_to_mesh':         return await handleApplyToMesh(args);
         case 'poll_job':              return await handlePollJob(args);
         case 'get_history':           return await handleGetHistory(args);
-        case 'inkscape_write_svg':    return await handleInkscapeWriteSvg(args);
         case 'blender_run_script':    return await handleBlenderRunScript(args);
         case 'generate_sword_mesh':   return await handleGenerateSwordMesh(args);
         case 'generate_3d_asset':     return await handleGenerate3dAsset(args);

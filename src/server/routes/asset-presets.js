@@ -229,12 +229,14 @@ export const ASSET_PRESETS = {
   },
 
   concept: {
-    loraName:    'SDXL-HearthstoneCard-Lora.safetensors',
-    technical:   'Hearthstone Card, detailed game illustration, cinematic composition',
-    negative:    ', text, watermark, card border, card frame, UI overlay, low quality',
-    cfgOverride:    6.0,
-    stepsOverride:  28,
-    suggestSize: { width: 768, height: 1024 },
+    // Free-form — no LoRA, no technical injection, no forced negative.
+    // buildPresetPrompt short-circuits for this type.
+    loraName:      null,
+    technical:     null,
+    negative:      '',
+    cfgOverride:   null,
+    stepsOverride: null,
+    suggestSize:   null,
   },
 
   portrait: {
@@ -297,15 +299,28 @@ export const STYLE_NEGATIVES = {
  * @returns {{ positive, negative, cfg, steps, loraName, suggestSize }}
  */
 export function buildPresetPrompt({ assetType, artStyle, subject, baseNegative, cfg, steps }) {
-  const preset     = ASSET_PRESETS[assetType];
-  const styleHint  = STYLE_HINTS[artStyle]    ?? '';
-  const styleNeg   = STYLE_NEGATIVES[artStyle] ?? '';
+  const preset = ASSET_PRESETS[assetType];
+
+  // Concept Art — pure free-form, zero injection
+  if (assetType === 'concept') {
+    return {
+      positive:    subject.trim() || 'concept art',
+      negative:    baseNegative,
+      cfg,
+      steps,
+      loraName:    null,
+      suggestSize: null,
+    };
+  }
+
+  const styleHint = STYLE_HINTS[artStyle]    ?? '';
+  const styleNeg  = STYLE_NEGATIVES[artStyle] ?? '';
 
   const positiveParts = [
     subject.trim() || null,    // USER PROMPT — full priority, first position
     styleHint      || null,    // light style hint
     preset?.technical || null, // technical framing/isolation only
-    'high quality, game-ready asset',  // minimal quality baseline
+    'high quality, game-ready asset',
   ].filter(Boolean);
 
   const positive = positiveParts.join(', ');
@@ -314,9 +329,9 @@ export function buildPresetPrompt({ assetType, artStyle, subject, baseNegative, 
   return {
     positive,
     negative,
-    cfg:        preset?.cfgOverride    ?? cfg,
-    steps:      preset?.stepsOverride  ?? steps,
-    loraName:   preset?.loraName       ?? null,
+    cfg:         preset?.cfgOverride   ?? cfg,
+    steps:       preset?.stepsOverride ?? steps,
+    loraName:    preset?.loraName      ?? null,
     suggestSize: preset?.suggestSize   ?? null,
   };
 }

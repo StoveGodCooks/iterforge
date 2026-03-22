@@ -15,11 +15,12 @@ import spriteSheetRoutes from './routes/sprite-sheet.js';
 import blenderRoutes      from './routes/blender.js';
 import masterforgeRoutes  from './routes/masterforge.js';
 import diagnosticsRoutes  from './routes/diagnostics.js';
-import inkscapeRoutes    from './routes/inkscape.js';
+import smeltingRoutes    from './routes/smelting.js';
 import mcpRoutes         from './routes/mcp.js';
 import exportRoutes      from './routes/export.js';
 import triposrRoutes     from './routes/triposr.js';
 import settingsRoutes    from './routes/settings.js';
+import editorRoutes      from './routes/editor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -43,11 +44,12 @@ export function createApp() {
   app.use('/api/blender',       blenderRoutes);
   app.use('/api/masterforge',   masterforgeRoutes);
   app.use('/api/diagnostics',   diagnosticsRoutes);
-  app.use('/api/inkscape',      inkscapeRoutes);
+  app.use('/api/smelting',      smeltingRoutes);
   app.use('/mcp',               mcpRoutes);
   app.use('/api/export',        exportRoutes);
   app.use('/api/triposr',       triposrRoutes);
   app.use('/api/settings',      settingsRoutes);
+  app.use('/api/editor',        editorRoutes);
 
   // ── Serve built frontend (production) ────────────────────────────────────
   app.use(express.static(FRONTEND_DIST));

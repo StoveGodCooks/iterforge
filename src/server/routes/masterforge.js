@@ -135,10 +135,12 @@ router.post('/generate', async (req, res) => {
       ).catch(() => {});
 
       if (!result.success) {
+        const lastStderr = result.stderr?.slice(-2000) || '';
         mfJobs.set(jobId, {
           status: 'failed',
-          error:  `MasterForge exited ${result.exitCode}`,
-          stderr: result.stderr?.slice(-2000),
+          error:  `MasterForge exited ${result.exitCode}: ${lastStderr.split('\n').pop()}`,
+          stderr: lastStderr,
+          fullError: result.stderr
         });
         scheduleCleanup(jobId);
         return;

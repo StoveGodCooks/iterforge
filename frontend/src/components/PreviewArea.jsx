@@ -1,9 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import ModelViewer    from './ModelViewer.jsx';
-import InkscapePanel  from './InkscapePanel.jsx';
 import PaintCanvas    from './PaintCanvas.jsx';
 
-export default function PreviewArea({ currentImage, history, onSelect, onDelete, onReuseSettings, onGenerated, historyLoading, onOpenSettings, onCursorChange, onForgeThis }) {
+export default function PreviewArea({
+  currentImage,
+  history,
+  onSelect,
+  onDelete,
+  onReuseSettings,
+  onGenerated,
+  historyLoading,
+  onOpenSettings,
+  onCursorChange,
+  onForgeThis,
+  onLockAsset,
+  lockedAsset,
+  anvilOpen,
+  onCloseAnvil,
+  onOpenAnvil,
+}) {
   const [zoom,           setZoom]           = useState(false);
   const [expandPrompt,   setExpandPrompt]   = useState(false);
   const [copiedSeed,     setCopiedSeed]     = useState(null);  // null | 'ok' | 'err'
@@ -13,24 +28,28 @@ export default function PreviewArea({ currentImage, history, onSelect, onDelete,
   const [clearConfirm,   setClearConfirm]   = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [imgLoaded,      setImgLoaded]      = useState(false);
-  const [expandInkscape,   setExpandInkscape]   = useState(false);
   const [expandPaint,      setExpandPaint]      = useState(false);
   const [previewFilter,    setPreviewFilter]    = useState('');
   const [openingBlender,   setOpeningBlender]   = useState(false);
   const [rotating,         setRotating]         = useState(false);
   const prevImgId = useRef(null);
 
+  // Sync external anvilOpen prop into expandPaint
+  useEffect(() => {
+    if (anvilOpen) setExpandPaint(true);
+  }, [anvilOpen]);
+
   // Update cursor based on which panel is open
   useEffect(() => {
-    if (expandPaint || expandInkscape) onCursorChange?.('painting');
+    if (expandPaint) onCursorChange?.('painting');
     else onCursorChange?.('default');
-  }, [expandPaint, expandInkscape]);
+    if (!expandPaint) onCloseAnvil?.();
+  }, [expandPaint]);
 
   // Reset image loading state and close panels when image changes
   useEffect(() => {
     if (currentImage?.id !== prevImgId.current) {
       setImgLoaded(false);
-      setExpandInkscape(false);
       setExpandPaint(false);
       setPreviewFilter('');
       prevImgId.current = currentImage?.id ?? null;
@@ -159,7 +178,16 @@ export default function PreviewArea({ currentImage, history, onSelect, onDelete,
   return (
     <div className="flex h-full">
       {/* Main preview — overflow-y-auto enables scroll wheel to reach metadata below image */}
-      <div data-tutorial="preview-area" className={`flex-1 flex flex-col items-center min-w-0 p-6 overflow-y-auto ${currentImage ? 'justify-start' : 'justify-center'}`}>
+      <div data-tutorial="preview-area" className={`flex-1 flex flex-col min-w-0 overflow-y-auto ${currentImage ? 'items-center p-6 justify-start' : expandPaint ? 'p-4' : 'items-center p-6 justify-center'}`}>
+
+        {/* Blank Anvil brainstorm pad — shown when Anvil is open with no image */}
+        {expandPaint && !currentImage && (
+          <PaintCanvas
+            currentImage={null}
+            onClose={() => { setExpandPaint(false); onCloseAnvil?.(); }}
+          />
+        )}
+
         {currentImage ? (
           <>
             {/* Image or 3D viewer */}
@@ -187,6 +215,12 @@ export default function PreviewArea({ currentImage, history, onSelect, onDelete,
                     style={previewFilter ? { filter: previewFilter } : undefined}
                     className={`rounded-xl shadow-2xl cursor-zoom-in object-contain ${zoom ? 'max-h-full max-w-full' : 'w-full'} ${imgLoaded ? '' : 'hidden'}`}
                   />
+                  {/* Lock Indicator */}
+                  {lockedAsset?.id === currentImage.id && (
+                    <div className="absolute top-3 left-3 bg-brand-500 text-surface-900 px-2 py-1 rounded shadow-lg flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
+                      <span className="text-xs">🔒</span> Source Locked
+                    </div>
+                  )}
                 </>
               )}
               {zoom && (
@@ -272,28 +306,15 @@ export default function PreviewArea({ currentImage, history, onSelect, onDelete,
                   {currentImage.type !== '3d' && currentImage.type !== 'triposr' && (
                     <button
                       data-tutorial="paint-btn"
-                      onClick={() => { setExpandPaint(v => !v); setExpandInkscape(false); setExpandMesh(false); }}
-                      title="Draw, paint or crop directly on the image"
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                      onClick={() => { setExpandPaint(v => !v); setExpandMesh(false); }}
+                      title="Open Anvil — draw, paint, shapes, text, fill and more"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${
                         expandPaint
-                          ? 'bg-purple-600/20 border-purple-500/60 text-purple-300'
-                          : 'bg-surface-700 hover:bg-surface-600 border-surface-600/50 text-slate-400 hover:text-slate-200'
-                      }`}>
-                      🖌 Draw
-                    </button>
-                  )}
-                  {/* Edit in Inkscape toggle — shown for 2D images */}
-                  {currentImage.type !== '3d' && currentImage.type !== 'triposr' && (
-                    <button
-                      data-tutorial="edit-image-btn"
-                      onClick={() => { setExpandInkscape(v => !v); setExpandMesh(false); setExpandPaint(false); }}
-                      title="Rotate, resize, flip or open in full Inkscape"
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                        expandInkscape
-                          ? 'bg-indigo-600/20 border-indigo-500/60 text-indigo-300'
-                          : 'bg-surface-700 hover:bg-surface-600 border-surface-600/50 text-slate-400 hover:text-slate-200'
-                      }`}>
-                      ✏ Edit Image
+                          ? 'border-yellow-500/60 text-yellow-300'
+                          : 'border-surface-600/50 text-slate-400 hover:text-slate-200'
+                      }`}
+                      style={expandPaint ? { background: 'rgba(255,204,0,0.10)', boxShadow: '0 0 10px rgba(255,204,0,0.15)' } : { background: 'transparent' }}>
+                      ⚒ Anvil
                     </button>
                   )}
                   {/* Edit in Blender — shown for 3D entries that have a .blend file */}
@@ -306,28 +327,32 @@ export default function PreviewArea({ currentImage, history, onSelect, onDelete,
                       {openingBlender ? '⬡ Opening…' : '⬡ Edit in Blender'}
                     </button>
                   )}
-                  {/* Forge This → send to MasterForge tab */}
-                  {currentImage.type !== '3d' && currentImage.type !== 'triposr' && onForgeThis && (
-                    <button
-                      onClick={onForgeThis}
-                      title="Send this image to the MasterForge pipeline"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border"
-                      style={{
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        borderColor: 'rgba(255,204,0,0.5)',
-                        color: 'var(--yellow)',
-                        background: 'rgba(255,204,0,0.06)',
-                        letterSpacing: '0.1em',
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.background = 'rgba(255,204,0,0.15)';
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.background = 'rgba(255,204,0,0.06)';
-                      }}
-                    >
-                      ⬡ Forge This →
-                    </button>
+                  {/* Smelt / Lock buttons */}
+                  {currentImage.type !== '3d' && currentImage.type !== 'triposr' && (
+                    lockedAsset?.id === currentImage.id ? (
+                      <button
+                        onClick={() => onForgeThis(currentImage)}
+                        title="Proceed to orthographic smelting"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border animate-pulse"
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          borderColor: 'var(--brand-500)',
+                          color: 'var(--brand-400)',
+                          background: 'rgba(255,204,0,0.1)',
+                          letterSpacing: '0.1em',
+                        }}
+                      >
+                        ♨ Smelt This →
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => onLockAsset(currentImage)}
+                        title="Lock this image as the source for smelting"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded-lg text-xs text-slate-300 hover:text-brand-400 font-medium transition-all border border-surface-600/50"
+                      >
+                        🔒 Lock Source
+                      </button>
+                    )
                   )}
                   <button onClick={() => onReuseSettings?.(currentImage)}
                     title="Load these settings back into the panel"
@@ -366,20 +391,6 @@ export default function PreviewArea({ currentImage, history, onSelect, onDelete,
                       onGenerated?.({ ...currentImage, filename: newFilename, timestamp: Date.now() });
                       setExpandPaint(false);
                     }}
-                  />
-                )}
-
-                {/* Inkscape editing panel — inline expand */}
-                {expandInkscape && currentImage.type !== '3d' && currentImage.type !== 'triposr' && (
-                  <InkscapePanel
-                    currentImage={currentImage}
-                    onClose={() => { setExpandInkscape(false); setPreviewFilter(''); }}
-                    onEdited={(newFilename) => {
-                      onGenerated?.({ ...currentImage, filename: newFilename, timestamp: Date.now() });
-                      setExpandInkscape(false);
-                      setPreviewFilter('');
-                    }}
-                    onPreviewFilter={setPreviewFilter}
                   />
                 )}
 
@@ -422,8 +433,8 @@ export default function PreviewArea({ currentImage, history, onSelect, onDelete,
               </div>
             )}
           </>
-        ) : (
-          <EmptyState />
+        ) : !expandPaint && (
+          <EmptyState onOpenAnvil={onOpenAnvil} />
         )}
       </div>
 
@@ -484,6 +495,11 @@ export default function PreviewArea({ currentImage, history, onSelect, onDelete,
               {entry.type === 'triposr' && (
                 <span className="absolute bottom-1 right-1 bg-surface-900/80 text-[8px] text-cyan-400 px-1 rounded">⬡ 3D</span>
               )}
+              {lockedAsset?.id === entry.id && (
+                <div className="absolute top-1 left-1 bg-brand-500 text-surface-900 w-4 h-4 rounded-full flex items-center justify-center text-[8px] shadow-lg border border-surface-900/50">
+                  🔒
+                </div>
+              )}
             </button>
           ))}
         </aside>
@@ -501,26 +517,138 @@ function Pill({ label, value }) {
   );
 }
 
-function EmptyState() {
+const QUICK_TYPES = [
+  { label: 'Character',    icon: '🧙', hint: 'Hero, villain, NPC — any humanoid game character with a consistent art style.' },
+  { label: 'Sprite Sheet', icon: '⊞',  hint: 'Walk cycles, attacks, idles — multi-frame animation sheets ready for 2D engines.' },
+  { label: 'Texture',      icon: '🪨', hint: 'Tileable PBR surfaces — stone, wood, fabric, metal. Feeds straight into MasterForge.' },
+  { label: 'Environment',  icon: '🌲', hint: 'Backgrounds, dungeons, landscapes — wide establishing shots for your world.' },
+  { label: 'UI Element',   icon: '🎛', hint: 'HUD icons, health bars, buttons, frames — pixel-perfect game interface pieces.' },
+  { label: 'Concept Art',  icon: '✏',  hint: 'Mood boards and design sketches — lock it as a source and smelt it into 3D.' },
+];
+
+function EmptyState({ onOpenAnvil }) {
+  const [hoveredType, setHoveredType] = useState(null);
+  const [anvilHovered, setAnvilHovered] = useState(false);
+
   return (
-    <div className="flex flex-col items-center gap-5 select-none max-w-sm text-center">
-      <div className="w-24 h-24 rounded-2xl bg-surface-700/30 border border-surface-600/30 flex items-center justify-center text-4xl">
-        🎨
+    <div className="flex flex-col items-center gap-6 select-none max-w-md text-center">
+
+      {/* Anvil button at the top — primary CTA */}
+      <div className="relative">
+        <button
+          onClick={onOpenAnvil}
+          onMouseEnter={() => setAnvilHovered(true)}
+          onMouseLeave={() => setAnvilHovered(false)}
+          className="relative flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm uppercase tracking-widest transition-all duration-300"
+          style={{
+            background: anvilHovered ? 'rgba(255,204,0,0.14)' : 'rgba(255,204,0,0.06)',
+            border: '1px solid',
+            borderColor: anvilHovered ? 'rgba(255,204,0,0.55)' : 'rgba(255,204,0,0.20)',
+            color: anvilHovered ? '#ffcc00' : '#8a7a40',
+            boxShadow: anvilHovered
+              ? '0 0 28px rgba(255,204,0,0.22), 0 0 10px rgba(255,204,0,0.12), inset 0 1px 0 rgba(255,204,0,0.18)'
+              : '0 0 12px rgba(255,204,0,0.07), inset 0 1px 0 rgba(255,255,255,0.03)',
+            backdropFilter: 'blur(8px)',
+            letterSpacing: '0.12em',
+          }}
+        >
+          <span style={{ fontSize: '1.2rem', filter: anvilHovered ? 'drop-shadow(0 0 8px rgba(255,204,0,0.7))' : 'none', transition: 'filter 0.3s' }}>⚒</span>
+          Open Anvil
+          <span style={{ fontSize: '9px', color: anvilHovered ? 'rgba(255,204,0,0.65)' : 'rgba(255,204,0,0.22)', fontWeight: 400, textTransform: 'none', letterSpacing: '0.04em' }}>
+            inline editor
+          </span>
+        </button>
+        {anvilHovered && (
+          <div
+            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-64 px-4 py-3 rounded-xl text-left pointer-events-none z-50"
+            style={{
+              background: 'rgba(10,10,15,0.95)',
+              border: '1px solid rgba(255,204,0,0.25)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.7), 0 0 16px rgba(255,204,0,0.08)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
+            <p className="text-[11px] font-bold text-brand-400 uppercase tracking-wider mb-1.5">⚒ The Anvil</p>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Draw, paint, and edit images inline — no external software needed.
+              Brush, pencil, shapes, fill, color picker, layers, and PNG→SVG trace.
+              Feed sketches back into generation or straight into MasterForge.
+            </p>
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0"
+              style={{ borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '6px solid rgba(255,204,0,0.25)' }}
+            />
+          </div>
+        )}
       </div>
+
+      {/* Directions */}
       <div>
-        <p className="text-base text-slate-300 font-semibold mb-1">No image yet</p>
-        <p className="text-sm text-slate-500 leading-relaxed">
-          Pick an asset type and art style on the left, then hit <span className="text-slate-300 font-medium">✦ Generate</span>.
-        </p>
-        <p className="text-xs text-slate-600 mt-3">
-          Tip: Use <kbd className="px-1 py-0.5 bg-surface-700 rounded text-[10px] border border-surface-600">Ctrl+Enter</kbd> to generate quickly.
+        <p className="text-sm leading-relaxed" style={{ color: '#ffcc00' }}>
+          Pick an asset type and art style on the left, then hit{' '}
+          <span className="font-bold">✦ Forge</span>.
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-2 mt-1 opacity-60">
-        {['Character', 'Sprite Sheet', 'Texture', 'Environment', 'UI Element', 'Concept Art'].map(t => (
-          <span key={t} className="px-2 py-1.5 bg-surface-700/40 border border-surface-600/30 rounded-lg text-[10px] text-slate-500">{t}</span>
-        ))}
+
+      {/* Live-helper type tabs */}
+      <div className="w-full">
+        <div className="grid grid-cols-3 gap-2">
+          {QUICK_TYPES.map(t => (
+            <div
+              key={t.label}
+              className="relative cursor-default"
+              onMouseEnter={() => setHoveredType(t.label)}
+              onMouseLeave={() => setHoveredType(null)}
+            >
+              <div
+                className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border transition-all duration-200"
+                style={{
+                  background: hoveredType === t.label
+                    ? 'rgba(255,204,0,0.07)'
+                    : 'rgba(255,255,255,0.03)',
+                  borderColor: hoveredType === t.label
+                    ? 'rgba(255,204,0,0.30)'
+                    : 'rgba(255,255,255,0.07)',
+                  backdropFilter: 'blur(6px)',
+                  boxShadow: hoveredType === t.label
+                    ? '0 0 12px rgba(255,204,0,0.10), inset 0 1px 0 rgba(255,255,255,0.05)'
+                    : 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                }}
+              >
+                <span className="text-base leading-none">{t.icon}</span>
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wider transition-colors duration-200"
+                  style={{ color: hoveredType === t.label ? '#ffcc00' : '#64748b' }}
+                >
+                  {t.label}
+                </span>
+              </div>
+              {/* Tooltip */}
+              {hoveredType === t.label && (
+                <div
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-48 px-3 py-2 rounded-lg text-[11px] text-slate-300 leading-relaxed pointer-events-none"
+                  style={{
+                    background: 'rgba(15,15,20,0.92)',
+                    border: '1px solid rgba(255,204,0,0.20)',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
+                    backdropFilter: 'blur(8px)',
+                  }}
+                >
+                  {t.hint}
+                  <div
+                    className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0"
+                    style={{
+                      borderLeft: '5px solid transparent',
+                      borderRight: '5px solid transparent',
+                      borderTop: '5px solid rgba(255,204,0,0.20)',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
+
     </div>
   );
 }

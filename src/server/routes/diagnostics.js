@@ -13,7 +13,6 @@ import { spawn, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { ITERFORGE_HOME, BLENDER_ASSETS_DIR, ENV_PATH } from '../../env/reader.js';
 import { detectBlender } from '../../backends/blender.js';
-import { detectInkscape, MANAGED_INKSCAPE_EXE } from '../../backends/inkscape.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = express.Router();
@@ -215,29 +214,7 @@ router.get('/run', async (req, res) => {
       emit('blender', 'skip', 'Skipping Blender tests — blender.exe not found');
     }
 
-    // ── 12. Inkscape ────────────────────────────────────────────────────────
-    const inkscapeExeExists = await fs.pathExists(MANAGED_INKSCAPE_EXE);
-    emit('inkscape', inkscapeExeExists ? 'pass' : 'warn', 'inkscape.exe (managed)', MANAGED_INKSCAPE_EXE);
-    const inkscapeInfo = await detectInkscape(null);
-    emit('inkscape', inkscapeInfo.found ? 'pass' : 'warn', 'detectInkscape()',
-      JSON.stringify(inkscapeInfo, null, 2));
-    if (inkscapeInfo.found) {
-      emit('inkscape', 'running', 'inkscape --version');
-      await new Promise(resolve => {
-        const child = spawn(inkscapeInfo.path, ['--version'], { windowsHide: true });
-        let out = '';
-        child.stdout?.on('data', d => { out += d.toString(); });
-        child.stderr?.on('data', d => { out += d.toString(); });
-        child.on('close', code => {
-          emit('inkscape', code === 0 ? 'pass' : 'fail', 'inkscape --version', out.trim());
-          resolve();
-        });
-        child.on('error', err => { emit('inkscape', 'fail', 'inkscape --version error', err.message); resolve(); });
-        setTimeout(() => { child.kill(); emit('inkscape', 'warn', 'inkscape --version TIMEOUT'); resolve(); }, 8000);
-      });
-    }
-
-    // ── 13. ComfyUI reachable ───────────────────────────────────────────────
+    // ── 12. ComfyUI reachable ───────────────────────────────────────────────
     emit('comfyui', 'running', 'Checking ComfyUI at http://127.0.0.1:8188…');
     try {
       const ctrl = new AbortController();
@@ -255,7 +232,6 @@ router.get('/run', async (req, res) => {
     const routes = [
       ['GET', '/api/status'],
       ['GET', '/api/blender/status'],
-      ['GET', '/api/inkscape/status'],
       ['GET', '/api/history'],
     ];
     for (const [method, route] of routes) {

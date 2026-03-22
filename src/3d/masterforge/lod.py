@@ -62,7 +62,6 @@ def generate_lods(stl_path: str, output_dir: str, stem: str,
                 decimated = mesh.decimate(
                     reduction,
                     volume_preservation=True,
-                    attribute_error=False,
                 )
                 decimated.save(out_path)
                 n_out = decimated.n_cells

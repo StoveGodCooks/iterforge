@@ -75,9 +75,8 @@ def unwrap_uv(stl_path: str, output_path: str = None, use_xatlas: bool = False) 
             vmapping=vmapping,
         )
         import os
-        size = os.path.getsize(output_path + '.npz'
-                               if not output_path.endswith('.npz')
-                               else output_path)
-        print(f'[masterforge.unwrap] UV data saved: {output_path}  ({size:,} bytes)')
+        final_path = output_path if output_path.endswith('.npz') else output_path + '.npz'
+        size = os.path.getsize(final_path)
+        print(f'[masterforge.unwrap] UV data saved: {final_path}  ({size:,} bytes)')
 
     return vmapping, new_faces, uvs, new_vertices
