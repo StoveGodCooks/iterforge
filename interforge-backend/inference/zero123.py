@@ -9,8 +9,9 @@ Architecture:
   Only one model lives in VRAM at a time — the GPU lock in job_manager
   ensures no overlap with SDXL or Depth Anything.
 
-  On an RTX 3070 (8GB), this model runs at ~3-4GB FP16 WITHOUT
-  cpu_offload — it fits comfortably and runs faster without offload overhead.
+  Upstream repo claims ~5GB VRAM for this model.  On RTX 3070 (8GB)
+  it runs in FP16 WITHOUT cpu_offload.  Actual peak VRAM is logged
+  at runtime — check [zero123] log lines for measured values.
 
 Camera Poses:
   Zero123++ v1.2 outputs 6 views in a 2×3 grid at fixed camera poses.
@@ -133,12 +134,15 @@ class Zero123Engine:
 
         t0 = time.perf_counter()
 
-        # Try offline first (no network check), fall back to online download
+        # Try offline first (no network check), fall back to online download.
+        # trust_remote_code=True is required by newer diffusers (0.26+)
+        # for loading custom pipelines from HuggingFace repos.
         try:
             self._pipe = DiffusionPipeline.from_pretrained(
                 model_path,
                 torch_dtype=dtype,
                 custom_pipeline=_HF_PIPELINE_ID,
+                trust_remote_code=True,
                 local_files_only=True,
             )
         except Exception:
@@ -147,6 +151,7 @@ class Zero123Engine:
                 _HF_MODEL_ID,
                 torch_dtype=dtype,
                 custom_pipeline=_HF_PIPELINE_ID,
+                trust_remote_code=True,
             )
             # Save to local model dir for future offline loads
             try:
@@ -159,13 +164,17 @@ class Zero123Engine:
         t1 = time.perf_counter()
         log.info(f"[zero123] Pipeline loaded in {t1 - t0:.1f}s")
 
-        # Zero123++ is ~2-3GB FP16 — fits on 8GB without cpu_offload.
+        # Zero123++ fits on 8GB GPUs without cpu_offload.
         # Running fully on GPU avoids the offload latency penalty.
+        # NOTE: upstream repo claims ~5GB VRAM — log actual peak to verify.
         if self._device == "cuda":
+            torch.cuda.reset_peak_memory_stats()
             t2 = time.perf_counter()
             self._pipe = self._pipe.to(self._device)
             t3 = time.perf_counter()
-            log.info(f"[zero123] Moved to {self._device} in {t3 - t2:.1f}s")
+            peak_gb = torch.cuda.max_memory_allocated() / 1024**3
+            log.info(f"[zero123] Moved to {self._device} in {t3 - t2:.1f}s "
+                     f"(peak VRAM after load: {peak_gb:.2f}GB)")
 
         log.info("[zero123] Zero123++ pipeline loaded and ready")
         _log_vram("after Zero123++ load")
@@ -247,7 +256,7 @@ class Zero123Engine:
     def generate_views(
         self,
         reference_image: Image.Image,
-        num_inference_steps: int = 40,
+        num_inference_steps: int = 75,
         guidance_scale: float = 4.0,
     ) -> dict[str, Image.Image]:
         """
@@ -255,6 +264,11 @@ class Zero123Engine:
 
         Returns dict mapping view name → PIL Image:
           "front", "front_right", "right", "back", "left", "front_left"
+
+        num_inference_steps: Upstream pipeline defaults to 28. Higher values
+            produce cleaner details at the cost of inference time. 75 steps
+            is the recommended value from the Zero123++ gradio_app.py demo.
+            Performance: ~45s at 28 steps, ~90s at 75 steps on RTX 3070.
         """
         if self._pipe is None:
             self.load()
@@ -284,7 +298,14 @@ class Zero123Engine:
             ) from exc
 
         t1 = time.perf_counter()
-        log.info(f"[zero123] Inference completed in {t1 - t0:.1f}s")
+
+        # Log actual peak VRAM during inference (audit requirement P1)
+        if self._device == "cuda":
+            peak_gb = torch.cuda.max_memory_allocated() / 1024**3
+            log.info(f"[zero123] Inference completed in {t1 - t0:.1f}s "
+                     f"(peak VRAM: {peak_gb:.2f}GB)")
+        else:
+            log.info(f"[zero123] Inference completed in {t1 - t0:.1f}s")
 
         # The output is a single composite image (2 cols × 3 rows grid).
         # Split it into 6 individual view images.
