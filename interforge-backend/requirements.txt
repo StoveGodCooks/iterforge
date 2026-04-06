@@ -1,0 +1,23 @@
+# InterForge Backend — Pinned Dependencies
+# Python 3.11 | CUDA 12.1 | RTX 3070 (8GB)
+# Tested and verified 2026-04-05
+
+# ── Core inference ───────────────────────────────────────────
+diffusers==0.37.1
+torch==2.5.1+cu121
+transformers==5.3.0
+
+# ── 3D reconstruction ───────────────────────────────────────
+open3d==0.19.0
+trimesh==4.11.4
+scipy==1.17.1
+scikit-image==0.26.0
+
+# ── Image processing ────────────────────────────────────────
+Pillow==12.1.1
+numpy==2.3.5
+rembg==2.0.73
+vtracer
+
+# ── Install torch with CUDA 12.1 ────────────────────────────
+# pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121

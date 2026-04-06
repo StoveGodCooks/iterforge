@@ -1,0 +1,286 @@
+/* ============================================================
+   App shell — titlebar, tab bar, content area layout
+   ============================================================ */
+
+/* -- App root layout ---------------------------------------- */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-void);
+}
+
+/* -- Custom titlebar ---------------------------------------- */
+.titlebar {
+  height: var(--titlebar-height);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--bg-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-3);
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__logo-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--yellow-core);
+}
+
+.titlebar__wordmark {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.titlebar__wordmark span {
+  color: var(--yellow-core);
+}
+
+/* -- Tinker Mode toggle (in titlebar centre) ----------------- */
+.titlebar__centre {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  -webkit-app-region: no-drag;
+}
+
+.tinker-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px var(--space-3) 3px var(--space-2);
+  background: transparent;
+  border: 1px solid var(--bg-border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.tinker-toggle:hover {
+  background: var(--bg-overlay);
+  border-color: var(--steel-edge);
+}
+.tinker-toggle--on {
+  background: rgba(201, 79, 26, 0.12);
+  border-color: var(--ember-core);
+}
+
+.tinker-toggle__icon {
+  font-size: 12px;
+}
+
+.tinker-toggle__label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.tinker-toggle--on .tinker-toggle__label {
+  color: var(--ember-bright);
+}
+
+/* The pill switch */
+.tinker-toggle__pill {
+  width: 24px;
+  height: 14px;
+  background: var(--steel-edge);
+  border-radius: var(--radius-full);
+  position: relative;
+  transition: background var(--transition-fast);
+}
+.tinker-toggle__pill::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+.tinker-toggle--on .tinker-toggle__pill {
+  background: rgba(201, 79, 26, 0.5);
+}
+.tinker-toggle--on .tinker-toggle__pill::after {
+  transform: translateX(10px);
+  background: var(--ember-bright);
+}
+
+/* Window control buttons */
+.titlebar__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__utility {
+  border: 1px solid var(--bg-border);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-full);
+  padding: 0.42rem 0.85rem;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.titlebar__utility:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+  border-color: var(--steel-edge);
+}
+
+.win-btn {
+  width: 28px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.win-btn:hover { background: var(--bg-overlay); color: var(--text-primary); }
+.win-btn--close:hover { background: var(--status-error); color: #fff; }
+
+/* -- Tab bar ------------------------------------------------
+   overflow-x: clip lets the bar scroll-hint horizontally
+   WITHOUT forcing overflow-y to auto (which clips the underline).
+   clip is the correct modern value — it clips without creating
+   a scroll container, so overflow-y can remain truly visible.
+   ------------------------------------------------------------ */
+.tab-bar {
+  height: var(--tab-bar-height);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--bg-border);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 var(--space-6);
+  gap: 2px;
+  flex-shrink: 0;
+  overflow: visible;           /* never clip anything */
+  scrollbar-width: none;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+
+.tab {
+  position: relative;
+  height: 36px;
+  padding: 0 var(--space-5);
+  border: none;
+  border-bottom: 2px solid transparent;   /* space reserved for underline */
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;              /* tabs never compress / overlap */
+  white-space: nowrap;         /* label never wraps */
+  box-sizing: border-box;
+}
+.tab:hover:not(.tab--disabled):not(.tab--active) {
+  color: var(--text-secondary);
+  background: var(--bg-raised);
+}
+
+/* Active tab — underline via border-bottom (never gets clipped) */
+.tab--active {
+  color: var(--text-primary);
+  background: var(--bg-raised);
+  border-bottom-color: var(--yellow-core);
+  /* Glow on the underline via box-shadow inset */
+  box-shadow: inset 0 -2px 8px rgba(200, 150, 10, 0.35);
+}
+
+/* Remove the old ::after pseudo-element underline entirely */
+.tab--active::after { display: none; }
+
+.tab__lock {
+  width: 12px;
+  height: 12px;
+  color: var(--yellow-core);
+  flex-shrink: 0;
+}
+
+/* Tinker Mode: all tabs glow ember instead of being disabled */
+.tab--tinker {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+.tab--tinker:not(.tab--active) {
+  color: rgba(201, 79, 26, 0.5);
+}
+.tab--tinker:hover {
+  color: var(--ember-bright) !important;
+}
+
+.tab--disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* -- Main content area -------------------------------------- */
+.content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-void);
+}
+
+.tab-panel {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  animation: fade-in var(--transition-normal) forwards;
+}
+
+/* -- Tinker Mode banner (shown inside content area) --------- */
+.tinker-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: rgba(201, 79, 26, 0.08);
+  border-bottom: 1px solid rgba(201, 79, 26, 0.25);
+  font-size: var(--text-xs);
+  color: var(--ember-bright);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}

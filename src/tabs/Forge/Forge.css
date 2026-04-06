@@ -1,0 +1,53 @@
+.forge {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.forge-pipeline-choice {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+}
+
+.pipeline-card {
+  flex: 1;
+  max-width: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  background: var(--bg-raised);
+  border: 1px solid var(--bg-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.pipeline-card:hover {
+  background: var(--bg-overlay);
+  border-color: var(--ember-core);
+  box-shadow: var(--shadow-ember);
+}
+
+.pipeline-card__icon {
+  font-size: 32px;
+}
+
+.pipeline-card__label {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pipeline-card__desc {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-align: center;
+}

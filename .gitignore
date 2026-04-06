@@ -1,0 +1,73 @@
+# ── Node / frontend ─────────────────────────────────────────────
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# ── Python / backend ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.env
+.venv
+env/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.log
+.mypy_cache/
+.ruff_cache/
+
+# ── Rust / Tauri ────────────────────────────────────────────────
+src-tauri/target/
+Cargo.lock
+
+# ── AI model weights (large binary files) ───────────────────────
+# Models are downloaded on first run — never commit weights
+interforge-backend/models/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.gguf
+*.ggml
+
+# ── Project output files ─────────────────────────────────────────
+interforge-projects/
+~/interforge-projects/
+
+# ── Generated / temp ─────────────────────────────────────────────
+*.ply
+*.glb
+*.obj
+*.fbx
+*.stl
+*.dxf
+*.svg_rasterized
+profiler_*.json
+profiler_*.md
+
+# ── OS files ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ──────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ── Secrets / env ────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+secrets.json

@@ -1,0 +1,176 @@
+/* ============================================================
+   INTERFORGE — Global Design System
+   All colors, fonts, spacing, and animations live here.
+   Change a variable here → updates everywhere in the app.
+   ============================================================ */
+
+/* -- Fonts -------------------------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* -- Other style files -------------------------------------- */
+@import './components.css';
+
+/* -- CSS Variables (design tokens) -------------------------- */
+:root {
+
+  /* --- Backgrounds: deep industrial steel grey --- */
+  --bg-void:        #080909;   /* app background — near black       */
+  --bg-base:        #0c0d0f;   /* titlebar, tab bar                 */
+  --bg-raised:      #111316;   /* panels, cards, inputs             */
+  --bg-overlay:     #181b1f;   /* hover states, dropdowns           */
+  --bg-border:      #252830;   /* standard dividers / outlines      */
+
+  /* --- Steel: the dominant surface palette --- */
+  --steel-deep:     #0f1215;
+  --steel-mid:      #1c2028;
+  --steel-surface:  #242830;
+  --steel-edge:     #343a46;   /* panel rim / raised edge           */
+  --steel-shine:    #5a6272;   /* icon tints, muted highlights      */
+
+  /* --- Forge Yellow: primary UI accent (panel trim, active tabs) --- */
+  --yellow-dim:     #3d3000;   /* very subtle background tint       */
+  --yellow-core:    #c8960a;   /* panel borders, active tab line    */
+  --yellow-bright:  #e8b020;   /* hover states, button highlight    */
+  --yellow-glow:    #f5c842;   /* focus rings, glow effects         */
+
+  /* --- Ember: secondary fire accent (lock buttons, CTAs) --- */
+  --ember-core:     #c94f1a;
+  --ember-bright:   #e86030;
+
+  /* --- Text --- */
+  --text-primary:   #dde0e8;   /* main body text                    */
+  --text-secondary: #7a8090;   /* labels, captions, descriptions    */
+  --text-muted:     #40454f;   /* disabled text, placeholders       */
+  --text-inverse:   #080909;   /* text on bright/light surfaces     */
+
+  /* --- Status colours --- */
+  --status-success: #2ecc71;
+  --status-warn:    #f39c12;
+  --status-error:   #e74c3c;
+  --status-info:    #3498db;
+
+  /* --- Spacing (8px base grid) --- */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* --- Border radius --- */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-full: 9999px;
+
+  /* --- Typography --- */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 14px;
+  --text-md:   16px;
+  --text-lg:   20px;
+  --text-xl:   24px;
+  --text-2xl:  32px;
+
+  /* --- Shadows --- */
+  --shadow-sm:            0 1px 4px rgba(0, 0, 0, 0.5);
+  --shadow-md:            0 4px 16px rgba(0, 0, 0, 0.6);
+  --shadow-lg:            0 8px 32px rgba(0, 0, 0, 0.7);
+  --shadow-yellow:        0 0 16px rgba(200, 150, 10, 0.25);
+  --shadow-yellow-strong: 0 0 32px rgba(200, 150, 10, 0.50);
+  --shadow-ember:         0 0 20px rgba(201, 79, 26, 0.30);
+
+  /* --- Transitions --- */
+  --transition-fast:   120ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow:   350ms ease;
+
+  /* --- App layout dimensions --- */
+  --titlebar-height: 36px;
+  --tab-bar-height:  48px;
+}
+
+/* -- Reset -------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  background: var(--bg-void);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+/* Allow text selection inside readable content */
+p, span, input, textarea, [data-selectable] {
+  user-select: text;
+}
+
+/* -- Scrollbar ------------------------------------------------ */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: var(--bg-base); }
+::-webkit-scrollbar-thumb  { background: var(--bg-border); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: var(--steel-edge); }
+
+/* -- Focus ring (keyboard nav) ------------------------------ */
+:focus-visible {
+  outline: 2px solid var(--yellow-glow);
+  outline-offset: 2px;
+}
+
+/* -- Utility classes ---------------------------------------- */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0;
+  margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
+  white-space: nowrap; border: 0;
+}
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -- Animations --------------------------------------------- */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes yellow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(200, 150, 10, 0.3); }
+  50%       { box-shadow: 0 0 20px rgba(200, 150, 10, 0.6); }
+}
+
+.animate-fade-in       { animation: fade-in var(--transition-normal) forwards; }
+.animate-slide-in      { animation: slide-in-right var(--transition-normal) forwards; }
+.animate-spin          { animation: spin 0.7s linear infinite; }
+.animate-yellow-pulse  { animation: yellow-pulse 2s ease infinite; }

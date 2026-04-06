@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="200" fill="#0c0d0f"/>
+  <!-- Outer hex ring -->
+  <polygon points="512,80 880,296 880,728 512,944 144,728 144,296"
+    fill="none" stroke="#c8960a" stroke-width="28"/>
+  <!-- Inner diamond -->
+  <polygon points="512,220 740,400 740,624 512,804 284,624 284,400"
+    fill="none" stroke="#c8960a" stroke-width="16" opacity="0.5"/>
+  <!-- I mark -->
+  <rect x="468" y="300" width="88" height="424" rx="12" fill="#c8960a"/>
+  <rect x="360" y="300" width="304" height="72" rx="12" fill="#c8960a"/>
+  <rect x="360" y="652" width="304" height="72" rx="12" fill="#c8960a"/>
+</svg>

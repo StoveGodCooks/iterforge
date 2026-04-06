@@ -1,0 +1,25 @@
+[package]
+name        = "interforge"
+version     = "0.1.0"
+description = "InterForge — AI-powered game asset pipeline"
+authors     = ["InterForge"]
+edition     = "2021"
+
+# lib target lets the same code compile for desktop and (future) mobile
+[lib]
+name       = "interforge_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri              = { version = "2", features = [] }
+tauri-plugin-shell  = "2"
+tauri-plugin-fs     = "2"
+tauri-plugin-dialog = "2"
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Phase 8 — auto-updater (requires signing key setup, add then)
+# tauri-plugin-updater = "2"
