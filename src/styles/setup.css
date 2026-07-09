@@ -201,7 +201,7 @@
   flex-shrink: 0;
 }
 .setup__badge--green  { background: rgba(80, 200, 120, 0.15); color: var(--status-ok); }
-.setup__badge--yellow { background: rgba(200, 150, 10, 0.15);  color: var(--yellow-core); }
+.setup__badge--yellow { background: rgba(240, 184, 40, 0.15);  color: var(--yellow-core); }
 .setup__badge--red    { background: rgba(220, 60, 60, 0.15);   color: var(--status-error); }
 .setup__badge--muted  { background: var(--bg-overlay);         color: var(--text-muted); }
 
@@ -287,8 +287,8 @@
 /* ── Hint ─────────────────────────────────────────────────── */
 .setup__hint {
   padding: var(--space-2) var(--space-3);
-  background: rgba(200, 150, 10, 0.06);
-  border-left: 2px solid rgba(200, 150, 10, 0.3);
+  background: rgba(240, 184, 40, 0.06);
+  border-left: 2px solid rgba(240, 184, 40, 0.3);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   font-size: var(--text-xs);
   color: var(--text-muted);
@@ -297,7 +297,7 @@
 .setup__hint code {
   font-family: var(--font-mono);
   color: var(--yellow-core);
-  background: rgba(200, 150, 10, 0.1);
+  background: rgba(240, 184, 40, 0.1);
   padding: 0 4px;
   border-radius: 3px;
 }
@@ -394,11 +394,11 @@
   color: var(--text-secondary);
 }
 .setup-btn--warning {
-  border-color: rgba(200, 150, 10, 0.45);
+  border-color: rgba(240, 184, 40, 0.45);
   color: var(--yellow-core);
 }
 .setup-btn--warning:hover {
-  background: rgba(200, 150, 10, 0.08);
+  background: rgba(240, 184, 40, 0.08);
   border-color: var(--yellow-core);
 }
 

@@ -1,16 +1,25 @@
-import { Component, useEffect, useState } from "react";
+import { Component, useEffect, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./styles/app.css";
 import "./styles/setup.css";
-import Prospecting from "./tabs/Prospecting/Prospecting";
-import Smelting from "./tabs/Smelting/Smelting";
-import Forge from "./tabs/Forge/Forge";
+
+import { PipelineProvider, usePipeline } from "./contexts/PipelineContext";
+import { AssetTrayProvider } from "./contexts/AssetTrayContext";
+import { ContextMenuProvider } from "./shell/ContextMenu";
+import { ProjectsProvider } from "./components/Projects/ProjectsContext";
+
+import StageRail from "./shell/StageRail";
+import HeaderBar from "./shell/HeaderBar";
+import AssetTray from "./shell/AssetTray";
+
+import ProspectStage from "./stages/Prospect/ProspectStage";
+import SmeltStage from "./stages/Smelt/SmeltStage";
+import ForgeStage from "./stages/Forge/ForgeStage";
 import DevTools from "./tabs/DevTools/DevTools";
-import OnboardingShell from "./components/Onboarding/OnboardingShell";
 import ProjectsShell from "./components/Projects/ProjectsShell";
 import SetupWizard from "./components/SetupWizard/SetupWizard";
-import type { Stage, ProspectingOutput, SmeltingOutput } from "./types/pipeline";
+import OnboardingShell from "./components/Onboarding/OnboardingShell";
+import ProjectBento from "./components/Projects/ProjectBento";
 
 /* ── Error Boundary ────────────────────────────────────────── */
 interface EBProps { children: ReactNode }
@@ -27,7 +36,7 @@ class ErrorBoundary extends Component<EBProps, EBState> {
       return (
         <div style={{
           display: "flex", flexDirection: "column", alignItems: "center",
-          justifyContent: "center", height: "100vh", gap: 16,
+          justifyContent: "center", height: "100%", gap: 16,
           background: "var(--bg-base, #0d1117)", color: "var(--text-primary, #e6dcc8)",
           fontFamily: "system-ui, sans-serif", padding: 32, textAlign: "center",
         }}>
@@ -52,44 +61,49 @@ class ErrorBoundary extends Component<EBProps, EBState> {
   }
 }
 
-type AppTab = Stage | "projects" | "devtools";
-type OnboardingFinishMode = "guided" | "tinker" | "projects";
+/* ── App Shell (inner, needs contexts) ─────────────────────── */
 
 const ONBOARDING_SEEN_KEY = "interforge.onboarding.seen";
 
-interface StageState<T = unknown> {
-  locked: boolean;
-  data: T | null;
-}
+function AppShell() {
+  const {
+    activeView, navigateTo,
+    devToolsEnabled, setDevToolsEnabled,
+  } = usePipeline();
 
-export default function App() {
-  const [activeTab,  setActiveTab]  = useState<AppTab>("prospecting");
-  const [tinkerMode, setTinkerMode] = useState(false);
-  const [showSetup,  setShowSetup]  = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingReady, setOnboardingReady] = useState(false);
-
-  const [stages, setStages] = useState<{
-    prospecting: StageState<ProspectingOutput>;
-    smelting:    StageState<SmeltingOutput>;
-    forge:       StageState<unknown>;
-  }>({
-    prospecting: { locked: false, data: null },
-    smelting:    { locked: false, data: null },
-    forge:       { locked: false, data: null },
-  });
-
-  function lockStage<T>(stage: Stage, data: T) {
-    setStages(prev => ({ ...prev, [stage]: { locked: true, data } }));
-    if (stage === "prospecting") setActiveTab("smelting");
-    if (stage === "smelting")    setActiveTab("forge");
-  }
+  const [bentoOpen, setBentoOpen] = useState(false);
+  const bentoOpenRef = useRef(bentoOpen);
+  bentoOpenRef.current = bentoOpen;
 
   useEffect(() => {
     const seen = window.localStorage.getItem(ONBOARDING_SEEN_KEY) === "true";
     setShowOnboarding(!seen);
     setOnboardingReady(true);
   }, []);
+
+  // ── Keyboard shortcuts ──────────────────────────────────────
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      // Shift+P → Project Bento
+      if (e.shiftKey && e.key === "P" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setBentoOpen((prev) => !prev);
+        return;
+      }
+      // Shift+D → DevTools toggle
+      if (e.shiftKey && e.key === "D" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setDevToolsEnabled(!devToolsEnabled);
+        return;
+      }
+      if (e.key === "Escape" && bentoOpenRef.current) {
+        setBentoOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [devToolsEnabled, setDevToolsEnabled]);
 
   function markOnboardingSeen() {
     window.localStorage.setItem(ONBOARDING_SEEN_KEY, "true");
@@ -100,252 +114,74 @@ export default function App() {
     setShowOnboarding(false);
   }
 
-  function finishOnboarding(mode: OnboardingFinishMode) {
+  function finishOnboarding(mode: "guided" | "tinker" | "projects") {
     markOnboardingSeen();
     setShowOnboarding(false);
-
-    if (mode === "guided") {
-      setTinkerMode(false);
-      setActiveTab("prospecting");
-      return;
+    if (mode === "projects") {
+      navigateTo("projects");
+    } else {
+      navigateTo("prospect");
     }
-
-    if (mode === "tinker") {
-      setTinkerMode(true);
-      setActiveTab("forge");
-      return;
-    }
-
-    setActiveTab("projects");
   }
 
-  // Tinker Mode bypasses all gates — all tabs accessible
-  const smeltingUnlocked = stages.prospecting.locked || tinkerMode;
-  const forgeUnlocked    = stages.smelting.locked    || tinkerMode;
-
   return (
-    <div className="app">
-      <Titlebar
-        tinkerMode={tinkerMode}
-        onToggleTinker={() => setTinkerMode(p => !p)}
-        onSetup={() => setShowSetup(true)}
-        onWalkthrough={() => setShowOnboarding(true)}
-      />
+    <div className="app-shell">
+      <StageRail />
 
-      <nav className="tab-bar" role="tablist">
-        <TabButton id="prospecting" label="Prospecting"
-          active={activeTab === "prospecting"} locked={stages.prospecting.locked}
-          disabled={false} tinker={false}
-          onClick={() => setActiveTab("prospecting")} />
-        <TabButton id="projects" label="Projects"
-          active={activeTab === "projects"} locked={false}
-          disabled={false} tinker={false}
-          onClick={() => setActiveTab("projects")} />
-        <TabButton id="smelting" label="Smelting"
-          active={activeTab === "smelting"} locked={stages.smelting.locked}
-          disabled={!smeltingUnlocked} tinker={tinkerMode && !stages.smelting.locked}
-          onClick={() => smeltingUnlocked && setActiveTab("smelting")} />
-        <TabButton id="forge" label="Forge"
-          active={activeTab === "forge"} locked={stages.forge.locked}
-          disabled={!forgeUnlocked} tinker={tinkerMode && !stages.forge.locked}
-          onClick={() => forgeUnlocked && setActiveTab("forge")} />
-        {tinkerMode && (
-          <TabButton id="devtools" label="Dev"
-            active={activeTab === "devtools"} locked={false}
-            disabled={false} tinker={false}
-            onClick={() => setActiveTab("devtools")} />
-        )}
-      </nav>
+      <div className="app-main">
+        <HeaderBar
+          onSetup={() => setShowSetup(true)}
+          onWalkthrough={() => setShowOnboarding(true)}
+        />
 
-      {/* Tinker Mode banner */}
-      {tinkerMode && (
-        <div className="tinker-banner">
-          ⚙ TINKER MODE — Gates bypassed. Jump to any stage freely.
+        <div className="content-wrap">
+          <main className="workspace">
+            <ErrorBoundary>
+              {activeView === "prospect" && <ProspectStage />}
+              {activeView === "smelt"    && <SmeltStage />}
+              {activeView === "forge"    && <ForgeStage />}
+              {activeView === "projects" && <ProjectsShell />}
+              {activeView === "devtools" && devToolsEnabled && <DevTools />}
+            </ErrorBoundary>
+          </main>
+
+          <AssetTray />
         </div>
-      )}
+      </div>
 
-      <main className="content">
-        <ErrorBoundary>
-          {activeTab === "prospecting" && (
-            <div className="tab-panel" role="tabpanel">
-              <Prospecting
-                tinkerMode={tinkerMode}
-                onLock={(data) => lockStage("prospecting", data)}
-                onJumpTo={(stage) => setActiveTab(stage as Stage)}
-              />
-            </div>
-          )}
-          {activeTab === "smelting" && smeltingUnlocked && (
-            <div className="tab-panel" role="tabpanel">
-              <Smelting
-                prospectingData={stages.prospecting.data}
-                onLock={(data) => lockStage<SmeltingOutput>("smelting", data)}
-              />
-            </div>
-          )}
-          {activeTab === "forge" && forgeUnlocked && (
-            <div className="tab-panel" role="tabpanel">
-              <Forge
-                smeltingData={stages.smelting.data}
-                prospectingData={stages.prospecting.data}
-                tinkerMode={tinkerMode}
-              />
-            </div>
-          )}
-          {activeTab === "projects" && (
-            <div className="tab-panel" role="tabpanel">
-              <ProjectsShell />
-            </div>
-          )}
-          {activeTab === "devtools" && tinkerMode && (
-            <div className="tab-panel" role="tabpanel" style={{ padding: 0 }}>
-              <DevTools />
-            </div>
-          )}
-        </ErrorBoundary>
-      </main>
-
-      {/* ── Setup Wizard overlay ─────────────────────── */}
+      {/* Overlays */}
       {showSetup && <SetupWizard onClose={() => setShowSetup(false)} />}
       {onboardingReady && showOnboarding && (
         <OnboardingShell
           onClose={closeOnboarding}
           onFinish={finishOnboarding}
+          onNavigate={(route) => {
+            navigateTo(route as Parameters<typeof navigateTo>[0]);
+            setShowOnboarding(false);
+          }}
         />
       )}
+      <ProjectBento
+        open={bentoOpen}
+        onClose={() => setBentoOpen(false)}
+        onOpenProjects={() => navigateTo("projects")}
+      />
     </div>
   );
 }
 
-/* -- Titlebar ----------------------------------------------- */
-interface TitlebarProps {
-  tinkerMode:     boolean;
-  onToggleTinker: () => void;
-  onSetup:        () => void;
-  onWalkthrough:  () => void;
-}
+/* ── Root component (wraps providers) ──────────────────────── */
 
-function Titlebar({ tinkerMode, onToggleTinker, onSetup, onWalkthrough }: TitlebarProps) {
-  async function minimize() {
-    console.info("[InterForge] minimize window");
-    await getCurrentWindow().minimize();
-  }
-  async function maximize() {
-    console.info("[InterForge] toggle maximize window");
-    const win = getCurrentWindow();
-    const maximized = await win.isMaximized();
-    if (maximized) {
-      await win.unmaximize();
-      return;
-    }
-    await win.maximize();
-  }
-  async function close() {
-    console.info("[InterForge] close window");
-    await getCurrentWindow().close();
-  }
-
+export default function App() {
   return (
-    <div className="titlebar">
-      <div className="titlebar__logo">
-        <svg className="titlebar__logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-          <path d="M2 17l10 5 10-5"/>
-          <path d="M2 12l10 5 10-5"/>
-        </svg>
-        <span className="titlebar__wordmark">
-          Inter<span>Forge</span>
-        </span>
-      </div>
-
-      {/* Tinker Mode — always centred in the titlebar */}
-      <div className="titlebar__centre">
-        <button
-          className={`tinker-toggle ${tinkerMode ? "tinker-toggle--on" : ""}`}
-          onClick={onToggleTinker}
-          title="Bypass stage gates — jump to any pipeline directly"
-        >
-          <span className="tinker-toggle__icon">⚙</span>
-          <span className="tinker-toggle__label">Tinker Mode</span>
-          <span className="tinker-toggle__pill" />
-        </button>
-      </div>
-
-      <div className="titlebar__controls">
-        <button
-          className="titlebar__utility"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={onWalkthrough}
-          title="Preview walkthrough"
-        >
-          Walkthrough
-        </button>
-        <button
-          className="setup-btn"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={onSetup}
-          title="Setup & Environment"
-        >
-          <span className="setup-btn__dot" />
-          Setup
-        </button>
-        <div style={{ width: 8 }} />
-        <button
-          className="win-btn"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={minimize}
-          title="Minimize"
-        >
-          &#x2013;
-        </button>
-        <button
-          className="win-btn"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={maximize}
-          title="Maximize"
-        >
-          &#x25A1;
-        </button>
-        <button
-          className="win-btn win-btn--close"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={close}
-          title="Close"
-        >
-          &#x2715;
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* -- Tab button --------------------------------------------- */
-interface TabButtonProps {
-  id: AppTab; label: string;
-  active: boolean; locked: boolean;
-  disabled: boolean; tinker: boolean;
-  onClick: () => void;
-}
-
-function TabButton({ label, active, locked, disabled, tinker, onClick }: TabButtonProps) {
-  const classes = [
-    "tab",
-    active   ? "tab--active"   : "",
-    disabled ? "tab--disabled" : "",
-    tinker   ? "tab--tinker"   : "",
-  ].filter(Boolean).join(" ");
-
-  return (
-    <button className={classes} onClick={onClick} role="tab" aria-selected={active}>
-      {label}
-      {locked && (
-        <svg className="tab__lock" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 1a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V11a2 2 0 0 0-2-2h-2V6a5 5 0 0 0-5-5zm0 2a3 3 0 0 1 3 3v3H9V6a3 3 0 0 1 3-3zm0 9a2 2 0 0 1 1 3.73V17a1 1 0 0 1-2 0v-1.27A2 2 0 0 1 12 12z"/>
-        </svg>
-      )}
-      {tinker && !locked && (
-        <span style={{ fontSize: 10, opacity: 0.7 }}>⚙</span>
-      )}
-    </button>
+    <PipelineProvider>
+      <ProjectsProvider>
+        <AssetTrayProvider>
+          <ContextMenuProvider>
+            <AppShell />
+          </ContextMenuProvider>
+        </AssetTrayProvider>
+      </ProjectsProvider>
+    </PipelineProvider>
   );
 }

@@ -1,0 +1,159 @@
+/* ── Anvil Stage Layout ─────────────────────────────────────── */
+.anvil-stage {
+  display: flex;
+  gap: 12px;
+  height: 100%;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.anvil-stage__canvas {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bg-border);
+  background: var(--bg-raised);
+}
+
+.anvil-stage__sidebar {
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.anvil-stage__actions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.anvil-stage__send-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--bg-border);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: var(--font-sans);
+}
+.anvil-stage__send-btn:hover {
+  border-color: var(--yellow-core);
+  color: var(--yellow-core);
+}
+.anvil-stage__send-btn--secondary {
+  color: var(--text-muted);
+}
+
+/* ── Anvil panels (layers, AI tools) ───────────────────────── */
+.anvil-panel {
+  background: var(--bg-raised);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bg-border);
+  padding: 10px 12px;
+}
+
+.anvil-panel__title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 8px;
+}
+
+.anvil-layer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.anvil-layer:hover {
+  background: var(--bg-overlay);
+}
+.anvil-layer.active {
+  background: rgba(240, 184, 40, 0.12);
+  color: var(--yellow-core);
+}
+
+.anvil-layer__eye {
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.anvil-layer__preview {
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  border: 1px solid var(--bg-border);
+  flex-shrink: 0;
+}
+
+/* ── AI tools bar ──────────────────────────────────────────── */
+.anvil-ai-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-void);
+  border-radius: 6px;
+  border: 1px solid var(--bg-border);
+}
+
+.anvil-ai-bar input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: var(--font-sans);
+}
+.anvil-ai-bar input::placeholder {
+  color: var(--text-muted);
+}
+.anvil-ai-bar input:focus {
+  outline: none;
+}
+
+.anvil-ai-bar button {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: none;
+  background: var(--yellow-core);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+.anvil-ai-bar button:hover {
+  filter: brightness(1.1);
+}
+
+.anvil-ai-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--bg-border);
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.12s;
+}
+.anvil-ai-btn:hover {
+  border-color: var(--yellow-core);
+  color: var(--yellow-core);
+}

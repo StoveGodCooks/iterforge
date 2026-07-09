@@ -58,7 +58,7 @@ async def run_forge(job: Job, params: dict) -> None:
     target_poly     = int(params.get("target_poly_count", 15000))
     export_fmt      = params.get("export_format", "glb").lower().replace("gltf", "glb")
 
-    # Normalise reconstruction path
+    # Normalise reconstruction path — organic (multi-view visual hull) is default
     recon_path = (params.get("reconstruction_path") or "auto").lower().strip()
     if recon_path not in ("hard_surface", "organic", "none"):
         recon_path = "organic"
@@ -66,49 +66,27 @@ async def run_forge(job: Job, params: dict) -> None:
     out_dir = PROJECTS_ROOT / job.id / "forge"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Resolve input view paths (single smelt job → 6 views) ─
-    view_rgba_paths: dict[str, Path | None] = {}
-    if smelt_job_id:
-        for angle in VIEW_ANGLES:
-            rgba = PROJECTS_ROOT / smelt_job_id / "smelt" / angle / "image_00_rgba.png"
-            raw  = PROJECTS_ROOT / smelt_job_id / "smelt" / angle / "image_00.png"
-            view_rgba_paths[angle] = rgba if rgba.exists() else (raw if raw.exists() else None)
-    else:
-        for angle in VIEW_ANGLES:
-            view_rgba_paths[angle] = None
-
-    # Tinker mode fallback — use locked prospect image as front view
-    if view_rgba_paths.get("front") is None and tinker_mode and prospect_job_id:
-        prospect_dir   = PROJECTS_ROOT / prospect_job_id / "prospect"
-        prospect_rgba  = prospect_dir / f"image_{image_index:02d}_rgba.png"
-        prospect_raw   = prospect_dir / f"image_{image_index:02d}.png"
-        fallback       = prospect_rgba if prospect_rgba.exists() else prospect_raw
-        if fallback.exists():
-            view_rgba_paths["front"] = fallback
-
-    # NONE path doesn't need views for mesh — skip the check
-    if recon_path != "none" and view_rgba_paths.get("front") is None:
-        await job.push(error_event(
-            "ERROR_FORGE_NO_VIEWS",
-            "No usable source image found. Complete Smelting first, "
-            "or use Tinker Mode with a locked Prospecting image.",
-        ))
-        return
-
-    found = sum(1 for p in view_rgba_paths.values() if p)
-    await job.push(log_event(
-        f"Forge pipeline starting — {found} view(s) — route: {recon_path.upper()}"
-    ))
-
     profiler = PipelineProfiler(job_id=job.id, route=recon_path.upper())
 
     # ── Route ─────────────────────────────────────────────────
-    if recon_path == "hard_surface":
-        await _run_hard_surface(job, params, view_rgba_paths, out_dir, target_poly, export_fmt, profiler)
-    elif recon_path == "none":
+    # 3D asset types → Stable Fast 3D: one locked prospect image → UV-textured mesh.
+    # NONE → 2D asset: copy source images through, no mesh.
+    if recon_path == "none":
+        view_rgba_paths: dict[str, Path | None] = {}
+        for angle in VIEW_ANGLES:
+            p = None
+            if smelt_job_id:
+                base = PROJECTS_ROOT / smelt_job_id / "smelt" / angle
+                rgba, raw = base / "image_00_rgba.png", base / "image_00.png"
+                p = rgba if rgba.exists() else (raw if raw.exists() else None)
+            view_rgba_paths[angle] = p
+        await job.push(log_event("Forge pipeline starting — route: NONE (2D asset)"))
         await _run_none(job, params, view_rgba_paths, out_dir)
     else:
-        await _run_organic(job, params, view_rgba_paths, out_dir, target_poly, export_fmt, profiler)
+        await job.push(log_event(
+            "Forge pipeline starting — route: SF3D (single image → textured mesh)"
+        ))
+        await _run_sf3d(job, params, out_dir, target_poly, export_fmt, profiler)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -360,6 +338,7 @@ def _engine_export(
     return export_path, mesh_url
 
 
+
 # ═══════════════════════════════════════════════════════════════
 #  ORGANIC BRANCH — Poisson reconstruction pipeline (original)
 # ═══════════════════════════════════════════════════════════════
@@ -452,7 +431,7 @@ async def _run_organic(
     try:
         with profiler.section("export", f"{export_fmt.upper()} packaging"):
             export_path = await asyncio.to_thread(
-                _step_export, repaired_path, export_path, export_fmt
+                _step_export, repaired_path, export_path, export_fmt, view_rgba_paths
             )
         job.checkpoint(4)
         rel       = export_path.relative_to(PROJECTS_ROOT)
@@ -573,6 +552,156 @@ async def _run_none(
 
 
 # ═══════════════════════════════════════════════════════════════
+#  SF3D BRANCH — single image → UV-textured mesh (Stable Fast 3D)
+# ═══════════════════════════════════════════════════════════════
+
+def _free_other_gpu_engines() -> None:
+    """
+    VRAM arbiter (GPU-primary): free the SDXL sprite engine before SF3D takes the
+    GPU, so only one heavy model is resident on the 8GB card at a time.
+    """
+    try:
+        from inference.engine import ForgeEngine
+        if ForgeEngine.get().is_loaded:
+            ForgeEngine.get().unload()
+    except Exception:
+        pass
+
+
+async def _run_sf3d(
+    job:         Job,
+    params:      dict,
+    out_dir:     Path,
+    target_poly: int,
+    export_fmt:  str,
+    profiler:    "PipelineProfiler",
+) -> None:
+    """
+    SF3D route — the locked prospect image → UV-unwrapped, PBR-textured GLB.
+    Replaces the Zero123++ multi-view + visual-hull reconstruction chain.
+    SF3D emits a clean, low-poly, textured mesh in one pass, so the old
+    decimate/refine/lod steps fast-pass (external decimation would break UVs).
+    """
+    from PIL import Image
+
+    prospect_job_id = (params.get("prospect_job_id") or "").strip()
+    image_index     = int(params.get("image_index", 0))
+    smelt_job_id    = (params.get("smelt_job_id") or "").strip()
+
+    # ── Resolve the single source image (prefer the RGBA prospect) ──
+    src: Path | None = None
+    if prospect_job_id:
+        pdir = PROJECTS_ROOT / prospect_job_id / "prospect"
+        for cand in (pdir / f"image_{image_index:02d}_rgba.png",
+                     pdir / f"image_{image_index:02d}.png"):
+            if cand.exists():
+                src = cand
+                break
+    if src is None and smelt_job_id:  # legacy fallback: a smelt front frame
+        sdir = PROJECTS_ROOT / smelt_job_id / "smelt" / "front"
+        for cand in (sdir / "image_00_rgba.png", sdir / "image_00.png"):
+            if cand.exists():
+                src = cand
+                break
+    if src is None:
+        await job.push(error_event(
+            "ERROR_FORGE_NO_SOURCE",
+            "No source image found. Lock a Prospect image before forging a 3D mesh.",
+        ))
+        profiler.export(out_dir)
+        return
+
+    # ── Step 1: build (SF3D inference) ────────────────────────
+    await job.push(step_active_event("build", "Stable Fast 3D — single image → textured mesh"))
+    try:
+        await asyncio.to_thread(_free_other_gpu_engines)   # arbiter: GPU-primary
+        from inference.sf3d_engine import SF3DEngine
+        eng = SF3DEngine.get()
+
+        img = Image.open(str(src))
+        # A locked prospect RGBA already has its background removed — skip rembg then.
+        has_alpha = img.mode == "RGBA" and img.split()[3].getextrema()[0] < 250
+
+        with profiler.section("build", "SF3D inference (single image → mesh + texture)"):
+            mesh = await asyncio.to_thread(
+                eng.generate_mesh,
+                img,
+                0.85,            # foreground_ratio
+                1024,            # texture_resolution
+                "none",          # remesh
+                -1,              # target_vertex_count (natural ~20k faces)
+                not has_alpha,   # remove_bg only if not already masked
+            )
+        job.checkpoint(0)
+        await job.push(step_done_event("build", f"{len(mesh.faces):,} faces, UV-textured"))
+    except Exception as exc:
+        await job.push(error_event("ERROR_FORGE_SF3D", f"SF3D generation failed: {exc}"))
+        profiler.export(out_dir)
+        return
+
+    # ── Steps 2-4: SF3D already produced a game-ready textured mesh ──
+    await job.push(step_active_event("decimate", "SF3D emits a low-poly mesh — external decimation skipped"))
+    await job.push(step_done_event("decimate", f"{len(mesh.faces):,} faces"))
+    await job.push(step_active_event("refine", "SF3D mesh is clean + watertight — refinement skipped"))
+    await job.push(step_done_event("refine", "Skipped"))
+    await job.push(step_active_event("lod", "LOD chain skipped to preserve UV texture"))
+    await job.push(step_done_event("lod", "LOD0 only"))
+    lod_paths: dict[str, str] = {}
+
+    # ── Step 5: export (UV-textured GLB) ──────────────────────
+    await job.push(step_active_event("export", "Packaging UV-textured GLB"))
+    export_path = out_dir / "asset.glb"
+    try:
+        with profiler.section("export", "Textured GLB export"):
+            await asyncio.to_thread(
+                lambda: mesh.export(str(export_path), include_normals=True)
+            )
+        job.checkpoint(4)
+        rel      = export_path.relative_to(PROJECTS_ROOT)
+        mesh_url = f"{OUTPUTS_URL}/{rel.as_posix()}"
+        await job.push(step_done_event("export", export_path.name))
+        await job.push(make_event(EventType.MESH_READY, {"mesh_url": mesh_url, "format": "glb"}))
+    except Exception as exc:
+        await job.push(error_event("ERROR_FORGE_EXPORT", str(exc)))
+        profiler.export(out_dir)
+        return
+
+    # ── Step 6: save ──────────────────────────────────────────
+    await job.push(step_active_event("save", "Writing project manifest"))
+    try:
+        with profiler.section("save", "project.json manifest"):
+            await asyncio.to_thread(
+                _step_save_project, job.id, out_dir, export_path, lod_paths, params
+            )
+        job.checkpoint(5)
+        await job.push(step_done_event("save", "project.json"))
+    except Exception as exc:
+        await job.push(log_event(f"Project save warning (non-fatal): {exc}"))
+
+    # Offload SF3D to CPU RAM so the GPU is free for the next stage (arbiter).
+    try:
+        from inference.sf3d_engine import SF3DEngine as _SF
+        await asyncio.to_thread(_SF.get().offload)
+    except Exception:
+        pass
+
+    try:
+        profiler.export(out_dir)
+    except Exception:
+        pass
+
+    rel = export_path.relative_to(PROJECTS_ROOT)
+    job.result = {
+        "mesh_url":      f"{OUTPUTS_URL}/{rel.as_posix()}",
+        "export_format": "glb",
+        "lod_paths":     lod_paths,
+        "out_dir":       str(out_dir),
+        "pipeline":      "sf3d",
+    }
+    await job.push(done_event(job.result))
+
+
+# ═══════════════════════════════════════════════════════════════
 #  ORGANIC step implementations (unchanged, used by ORGANIC branch
 #  and as fallback in HARD_SURFACE branch)
 # ═══════════════════════════════════════════════════════════════
@@ -584,230 +713,50 @@ def _step_reconstruct(
     profiler: "PipelineProfiler | None" = None,
 ) -> Path:
     """
-    Visual hull reconstruction from multi-view alpha silhouettes.
+    Fallback reconstruction — delegates to visual_hull_reconstruct in
+    inference/reconstruct.py (same code path as _step_reconstruct_tsdf).
 
-    For each voxel in a 3D grid, project it onto every available view's
-    alpha mask.  A voxel survives only if it falls INSIDE the silhouette
-    in ALL views.  This is the classical "space carving" algorithm — the
-    correct approach when input is RGBA images with clean alpha channels.
-
-    Pipeline:
-      1. Load RGBA views, extract binary alpha silhouettes.
-      2. Synthesize a back view (mirrored front) since no back camera exists.
-      3. Carve the voxel grid: multiply by each view's silhouette projection.
-      4. Gaussian-smooth the volume for a clean surface.
-      5. Marching cubes → triangle mesh → PLY.
-
-    No depth estimation is used — the alpha silhouette intersection from
-    4-5 views constrains the 3D shape accurately without monocular depth
-    (which produces flat / noisy results on AI-generated game art).
+    Called only when _step_reconstruct_tsdf raises an exception.
+    Uses a lower resolution and no SVG masks to reduce the chance of a
+    second failure.
     """
     import numpy as np
     from PIL import Image
-    import open3d as o3d
-    from scipy.ndimage import gaussian_filter
-    from skimage.measure import marching_cubes
+    import logging
 
-    # Convenience: no-op section() when profiler is absent
-    from contextlib import nullcontext as _noop
-    def _sec(name, label=""):
-        return profiler.section(name, label) if profiler else _noop()
+    log = logging.getLogger(__name__)
+    log.info("[forge] _step_reconstruct fallback: delegating to reconstruct.py")
 
-    # ── Load RGBA views at 512×512 ───────────────────────────────
-    with _sec("build.load_images", "Load + resize RGBA views to 512×512"):
-        view_rgbas: dict[str, np.ndarray] = {}
-        for angle, path in view_rgba_paths.items():
-            if path and path.exists():
-                img = np.array(Image.open(str(path)).convert("RGBA").resize((512, 512)))
-                view_rgbas[angle] = img
+    # Load RGBA views
+    view_rgbas: dict[str, np.ndarray] = {}
+    for angle, path in view_rgba_paths.items():
+        if path and path.exists():
+            pil_img = Image.open(str(path)).convert("RGBA")
+            view_rgbas[angle] = np.array(pil_img.resize((512, 512), Image.BILINEAR))
 
     if not view_rgbas:
         raise RuntimeError("No view RGBA images found for reconstruction.")
 
-    # Synthesize back view (mirrored front) — we never have a real back camera
-    if "front" in view_rgbas and "back" not in view_rgbas:
-        view_rgbas["back"] = np.flip(view_rgbas["front"], axis=1).copy()
+    alpha_masks: dict[str, np.ndarray] = {
+        k: (v[..., 3] > 128).astype(np.uint8) * 255
+        for k, v in view_rgbas.items()
+    }
 
-    # Synthesize side views when missing (Tinker Mode: only front exists).
-    # Without side views the visual hull degenerates to a thick slab.
-    # Strategy: for each row of the front alpha, measure the horizontal span
-    # of opaque pixels.  The synthetic side view has the SAME height profile
-    # but width = front_span * THICKNESS_RATIO at each row.  This creates an
-    # elliptical cross-section assumption — much better than no constraint.
-    if "front" in view_rgbas and "right" not in view_rgbas:
-        THICKNESS_RATIO = 0.30  # side depth ≈ 30% of front width
-        front_alpha = (view_rgbas["front"][..., 3] > 64)
-        h, w = front_alpha.shape
-        synth_alpha = np.zeros((h, w), dtype=np.uint8)
-        for row in range(h):
-            cols = np.where(front_alpha[row])[0]
-            if len(cols) == 0:
-                continue
-            span = cols[-1] - cols[0] + 1
-            side_span = max(1, int(span * THICKNESS_RATIO))
-            center = w // 2
-            c0 = center - side_span // 2
-            c1 = c0 + side_span
-            synth_alpha[row, max(0, c0):min(w, c1)] = 255
-        # Build a full RGBA from the synthetic alpha (RGB doesn't matter for carving)
-        synth_rgba = np.zeros((h, w, 4), dtype=np.uint8)
-        synth_rgba[..., :3] = 128  # neutral grey
-        synth_rgba[..., 3] = synth_alpha
-        view_rgbas["right"] = synth_rgba
-        view_rgbas["left"] = np.flip(synth_rgba, axis=1).copy()
+    from inference.reconstruct import visual_hull_reconstruct, cleanup_mesh
 
-    # Synthesize top view when missing — use the front alpha's horizontal
-    # span as width and the synthetic side span as height.
-    if "front" in view_rgbas and "top" not in view_rgbas:
-        front_alpha = (view_rgbas["front"][..., 3] > 64)
-        h, w = front_alpha.shape
-        # Get the overall bounding box of the front silhouette
-        cols_any = np.any(front_alpha, axis=0)
-        if cols_any.any():
-            c0, c1 = np.where(cols_any)[0][[0, -1]]
-            front_span = c1 - c0 + 1
-        else:
-            front_span = w // 2
-        THICKNESS_RATIO_TOP = 0.30
-        side_span = max(1, int(front_span * THICKNESS_RATIO_TOP))
-        synth_top = np.zeros((h, w, 4), dtype=np.uint8)
-        synth_top[..., :3] = 128
-        # Top view: object centred, width = front_span, height = side_span
-        cx, cy = w // 2, h // 2
-        x0 = max(0, cx - front_span // 2)
-        x1 = min(w, x0 + front_span)
-        y0 = max(0, cy - side_span // 2)
-        y1 = min(h, y0 + side_span)
-        synth_top[y0:y1, x0:x1, 3] = 255
-        view_rgbas["top"] = synth_top
+    mesh = visual_hull_reconstruct(
+        alpha_masks=alpha_masks,
+        view_images=view_rgbas,
+        resolution=192,        # lower res for fallback stability
+        image_size=512,
+        smooth_sigma=1.5,
+        photo_consistency=False,
+        poisson_depth=6,
+    )
+    mesh = cleanup_mesh(mesh, smooth_iterations=3)
+    mesh.export(str(out_path))
 
-    # ── Adaptive bounding box from alpha silhouettes ──────────────
-    # Focus voxel resolution on the object's actual extent instead of
-    # wasting grid cells on empty space (e.g., a tall narrow sword).
-    PADDING = 0.05
-    bbox_min = np.array([-0.5, -0.5, -0.5], dtype=np.float32)
-    bbox_max = np.array([ 0.5,  0.5,  0.5], dtype=np.float32)
-
-    def _alpha_bbox(rgba: np.ndarray):
-        """Return (u_min, u_max, v_min, v_max) in [0,1] from alpha mask."""
-        alpha = rgba[..., 3] > 64
-        rows = np.any(alpha, axis=1)
-        cols = np.any(alpha, axis=0)
-        if not rows.any() or not cols.any():
-            return 0.0, 1.0, 0.0, 1.0
-        r0, r1 = np.where(rows)[0][[0, -1]]
-        c0, c1 = np.where(cols)[0][[0, -1]]
-        h, w = alpha.shape
-        return c0 / w, (c1 + 1) / w, r0 / h, (r1 + 1) / h
-
-    if "front" in view_rgbas:
-        u0, u1, v0, v1 = _alpha_bbox(view_rgbas["front"])
-        bbox_min[0] = max(-0.5, (u0 - 0.5) - PADDING)
-        bbox_max[0] = min( 0.5, (u1 - 0.5) + PADDING)
-        bbox_min[1] = max(-0.5, (0.5 - v1) - PADDING)
-        bbox_max[1] = min( 0.5, (0.5 - v0) + PADDING)
-
-    if "right" in view_rgbas:
-        u0, u1, v0, v1 = _alpha_bbox(view_rgbas["right"])
-        bbox_min[2] = max(-0.5, -(u1 - 0.5) - PADDING)
-        bbox_max[2] = min( 0.5, -(u0 - 0.5) + PADDING)
-        y_min_r = max(-0.5, (0.5 - v1) - PADDING)
-        y_max_r = min( 0.5, (0.5 - v0) + PADDING)
-        bbox_min[1] = max(bbox_min[1], y_min_r)
-        bbox_max[1] = min(bbox_max[1], y_max_r)
-
-    if profiler:
-        profiler.mark("build.adaptive_bbox",
-                      f"bbox X[{bbox_min[0]:.2f},{bbox_max[0]:.2f}] "
-                      f"Y[{bbox_min[1]:.2f},{bbox_max[1]:.2f}] "
-                      f"Z[{bbox_min[2]:.2f},{bbox_max[2]:.2f}]")
-
-    # ── Visual hull: carve voxel grid with silhouettes ───────────
-    #
-    # Volume axes use 'ij' indexing: volume[ix, iy, iz]
-    # maps to world position (lin_x[ix], lin_y[iy], lin_z[iz]).
-    #
-    # Each view defines an orthographic projection. We compute a 2D
-    # lookup (RES×RES) and broadcast into the 3D volume along the
-    # "free" axis.  Memory is O(RES²) per view, not O(RES³).
-
-    RES = 192
-    lin_x = np.linspace(bbox_min[0], bbox_max[0], RES, dtype=np.float32)
-    lin_y = np.linspace(bbox_min[1], bbox_max[1], RES, dtype=np.float32)
-    lin_z = np.linspace(bbox_min[2], bbox_max[2], RES, dtype=np.float32)
-    volume = np.ones((RES, RES, RES), dtype=np.float32)
-
-    with _sec("build.carve_volume", f"Space carving {len(view_rgbas)} views into {RES}³ grid"):
-      for angle, rgba in view_rgbas.items():
-        alpha = (rgba[..., 3] > 64).astype(np.float32)
-        h, w = alpha.shape
-
-        if angle == "front":        # u=+x, v=+y → free axis = z
-            u_c, v_c = lin_x, lin_y
-            def bcast(m): return m[:, :, np.newaxis]
-        elif angle == "back":       # u=−x, v=+y → free axis = z
-            u_c, v_c = -lin_x, lin_y
-            def bcast(m): return m[:, :, np.newaxis]
-        elif angle == "right":      # u=−z, v=+y → free axis = x
-            u_c, v_c = -lin_z, lin_y
-            def bcast(m): return m.T[np.newaxis, :, :]
-        elif angle == "left":       # u=+z, v=+y → free axis = x
-            u_c, v_c = lin_z, lin_y
-            def bcast(m): return m.T[np.newaxis, :, :]
-        elif angle == "top":        # u=+x, v=+z → free axis = y
-            u_c, v_c = lin_x, lin_z
-            def bcast(m): return m[:, np.newaxis, :]
-        else:
-            continue
-
-        # u_c/v_c are world coords — map to [0,1] pixel space via (coord + 0.5)
-        px = np.clip(((u_c + 0.5) * (w - 1)).astype(np.int32), 0, w - 1)
-        py = np.clip(((0.5 - v_c) * (h - 1)).astype(np.int32), 0, h - 1)
-        inside_2d = alpha[py[np.newaxis, :], px[:, np.newaxis]]
-        volume *= bcast(inside_2d)
-
-    # ── Smooth + marching cubes → triangle mesh ─────────────────
-    with _sec("build.marching_cubes", "Gaussian smooth + marching cubes isosurface"):
-        volume = gaussian_filter(volume, sigma=1.5)
-        padded = np.pad(volume, 1, mode='constant', constant_values=0)
-        try:
-            verts, faces, _, _ = marching_cubes(padded, level=0.5)
-        except (ValueError, RuntimeError):
-            raise RuntimeError(
-                "Visual hull produced no geometry — check that view images "
-                "have valid alpha channels (transparent background)."
-            )
-
-    # Rescale vertices from padded-grid indices to per-axis world coords
-    span = bbox_max - bbox_min
-    verts_world = bbox_min[np.newaxis, :] + (verts - 1.0) / (RES - 1) * span[np.newaxis, :]
-    verts = verts_world
-
-    if len(verts) < 4:
-        raise RuntimeError("Visual hull produced too few vertices.")
-
-    with _sec("build.mesh_cleanup", "Floating island removal + normals + PLY write"):
-        mesh = o3d.geometry.TriangleMesh()
-        mesh.vertices = o3d.utility.Vector3dVector(verts.astype(np.float64))
-        mesh.triangles = o3d.utility.Vector3iVector(faces.astype(np.int32))
-
-        # ── Remove floating islands (keep largest connected component) ──
-        triangle_clusters, cluster_n_triangles, _ = (
-            mesh.cluster_connected_triangles()
-        )
-        cluster_n_triangles = np.asarray(cluster_n_triangles)
-        if len(cluster_n_triangles) > 1:
-            largest = cluster_n_triangles.argmax()
-            triangles_to_remove = np.asarray(triangle_clusters) != largest
-            mesh.remove_triangles_by_mask(triangles_to_remove)
-            mesh.remove_unreferenced_vertices()
-
-        mesh.compute_vertex_normals()
-        o3d.io.write_triangle_mesh(str(out_path), mesh)
-
-    if profiler:
-        profiler.mark("build.done", f"{len(np.asarray(mesh.triangles)):,} triangles written to {out_path.name}")
-
+    log.info(f"[forge] Fallback reconstruction: {len(mesh.vertices)} verts → {out_path.name}")
     return out_path
 
 
@@ -840,8 +789,16 @@ def _step_reconstruct_tsdf(
         view_rgbas: dict[str, np.ndarray] = {}
         for angle, path in view_rgba_paths.items():
             if path and path.exists():
-                img = np.array(Image.open(str(path)).convert("RGBA").resize((768, 768)))
-                view_rgbas[angle] = img
+                pil_img = Image.open(str(path)).convert("RGBA")
+                # Resize RGB channels with BILINEAR (smooth color) but
+                # alpha channel with NEAREST (crisp silhouette edges).
+                # Source images are 320×320 → 768×768 (2.4× upscale).
+                # LANCZOS/BICUBIC on alpha creates a 24% transition zone
+                # that shifts the silhouette boundary and adds carving noise.
+                rgb_resized = pil_img.convert("RGB").resize((768, 768), Image.BILINEAR)
+                alpha_resized = pil_img.split()[3].resize((768, 768), Image.NEAREST)
+                pil_merged = Image.merge("RGBA", (*rgb_resized.split(), alpha_resized))
+                view_rgbas[angle] = np.array(pil_merged)
 
     if not view_rgbas:
         raise RuntimeError("No view RGBA images found for reconstruction.")
@@ -893,17 +850,75 @@ def _step_reconstruct_tsdf(
         else:
             log.info(f"[forge] Loaded {len(svg_data)} SVG silhouettes for sharper carving")
 
+    # ── Front-view depth estimation ───────────────────────────────
+    # Only the front view (user's Prospect image) gets depth estimation.
+    # Side views are AI-generated — running depth on hallucinated images
+    # produces hallucinated depth. The front depth is the ground truth;
+    # it gets reprojected into the volume and used to expand side silhouettes.
+    front_depth: np.ndarray | None = None
+    if "front" in view_rgbas:
+        with _sec("build.depth_estimation", "Front-view depth (DepthAnything V2)"):
+            try:
+                from inference.depth import estimate_depth, unload as unload_depth
+
+                front_depth = estimate_depth(view_rgbas["front"])
+                log.info("[forge] Front depth map estimated")
+
+                unload_depth()
+            except Exception as exc:
+                log.warning(f"[forge] Depth estimation failed ({exc}), proceeding without")
+                front_depth = None
+
+    # ── Cross-view silhouette correction ───────────────────────
+    # Reproject front depth into side views to expand their silhouettes
+    # where the front geometry says object exists but side mask is empty.
+    if front_depth is not None and "front" in alpha_masks:
+        with _sec("build.cross_view", "Cross-view silhouette correction"):
+            try:
+                from inference.reconstruct import enforce_cross_view_consistency
+
+                ref_mask = alpha_masks["front"]
+                side_masks = {k: v for k, v in alpha_masks.items() if k != "front"}
+
+                # We pass empty side depths — only silhouette expansion matters
+                # since we don't have real side-view depth to correct.
+                empty_side_depths = {k: np.zeros_like(front_depth) for k in side_masks}
+
+                _, corrected_masks = enforce_cross_view_consistency(
+                    front_depth, empty_side_depths, ref_mask, side_masks, 768,
+                )
+
+                for vn in corrected_masks:
+                    alpha_masks[vn] = corrected_masks[vn]
+
+                log.info("[forge] Silhouette correction applied from front depth")
+
+            except Exception as exc:
+                log.warning(f"[forge] Silhouette correction failed ({exc}), using raw masks")
+
     # ── Visual hull reconstruction ───────────────────────────────
     with _sec("build.visual_hull", "Visual hull carving (6 views × camera projection)"):
         try:
             from inference.reconstruct import visual_hull_reconstruct, cleanup_mesh
 
+            # Pass front depth only — it's the sole ground truth.
+            # Side views are AI-generated; their depth would be hallucinated.
+            view_depths = {"front": front_depth} if front_depth is not None else None
+
             mesh = visual_hull_reconstruct(
                 alpha_masks=alpha_masks,
                 view_images=view_rgbas,
+                view_depths=view_depths,
                 svg_data=svg_data,
                 resolution=256,
                 image_size=768,
+                smooth_sigma=1.5,
+                photo_consistency=False,    # DISABLED — Zero123++ lighting variance
+                                            # triggers false carving at threshold 30.
+                                            # Re-enable when we add per-view color
+                                            # normalization.
+                poisson_depth=7,
+                depth_fusion_weight=0.3,    # Blend front depth surface into hull
             )
             log.info(f"[forge] Visual hull mesh: {len(mesh.vertices)} verts, {len(mesh.faces)} faces")
         except Exception as exc:
@@ -911,7 +926,7 @@ def _step_reconstruct_tsdf(
 
     # ── Cleanup + save ───────────────────────────────────────────
     with _sec("build.mesh_cleanup", "Mesh cleanup + PLY write"):
-        mesh = cleanup_mesh(mesh, smooth_iterations=3, target_faces=None)
+        mesh = cleanup_mesh(mesh, smooth_iterations=5, target_faces=None)
         mesh.export(str(out_path))
 
     if profiler:
@@ -962,7 +977,12 @@ def _step_lod(mesh_path: Path, out_dir: Path) -> dict[str, str]:
     return lod_paths
 
 
-def _step_export(mesh_path: Path, out_path: Path, export_fmt: str) -> Path:
+def _step_export(
+    mesh_path:       Path,
+    out_path:        Path,
+    export_fmt:      str,
+    view_rgba_paths: "dict[str, Path | None] | None" = None,
+) -> Path:
     import trimesh
     mesh = trimesh.load(str(mesh_path))
     if isinstance(mesh, trimesh.Scene):
@@ -976,6 +996,33 @@ def _step_export(mesh_path: Path, out_path: Path, export_fmt: str) -> Path:
             "FBX export is not yet supported (requires Blender headless). "
             "Your mesh has been exported as GLB instead."
         )
+
+    # Vertex color projection — re-project from source view images onto the
+    # final repaired mesh.  Uses export_all which handles both the color math
+    # and the GLB packaging in one pass.
+    if view_rgba_paths:
+        from engine.export import export_all
+        views_for_export: dict[str, str | None] = {
+            angle: str(p) if p and p.exists() else None
+            for angle, p in view_rgba_paths.items()
+        }
+        if any(v is not None for v in views_for_export.values()):
+            try:
+                result = export_all(
+                    shape=mesh,
+                    out_dir=out_path.parent,
+                    views=views_for_export,
+                    formats=[export_fmt],
+                    base_name=out_path.stem,
+                    no_lod=True,
+                    no_dxf=True,
+                    smooth_iterations=0,
+                )
+                export_file = result.get(export_fmt) or result.get("glb")
+                if export_file:
+                    return Path(export_file)
+            except Exception:
+                pass  # fall through to plain export
 
     mesh.export(str(out_path))
     return out_path

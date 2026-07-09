@@ -272,6 +272,32 @@ def project_vertex_colors(
 
 # ── Open3D smoothing ──────────────────────────────────────────
 
+def _copy_vertex_colors(mesh: "trimesh.Trimesh") -> "np.ndarray | None":
+    """Return a uint8 copy of mesh vertex colors, or None if absent."""
+    try:
+        vc = mesh.visual.vertex_colors
+        if vc is not None and len(vc) == len(mesh.vertices):
+            return np.asarray(vc, dtype=np.uint8).copy()
+    except Exception:
+        pass
+    return None
+
+
+def _paste_vertex_colors(
+    src_verts: np.ndarray,
+    colors:    np.ndarray,
+    dst:       "trimesh.Trimesh",
+) -> None:
+    """Transfer vertex colors from src positions to dst via nearest-neighbor."""
+    try:
+        from scipy.spatial import cKDTree
+        tree = cKDTree(src_verts)
+        _, idx = tree.query(np.asarray(dst.vertices, dtype=np.float64))
+        dst.visual.vertex_colors = colors[idx]
+    except Exception:
+        pass
+
+
 def smooth_mesh_laplacian(
     mesh:       "trimesh.Trimesh",  # type: ignore
     iterations: int = 3,
@@ -286,17 +312,23 @@ def smooth_mesh_laplacian(
         import open3d as o3d  # type: ignore
         import trimesh  # type: ignore
 
+        src_verts  = np.asarray(mesh.vertices, dtype=np.float64)
+        src_colors = _copy_vertex_colors(mesh)
+
         o3d_mesh = o3d.geometry.TriangleMesh()
-        o3d_mesh.vertices  = o3d.utility.Vector3dVector(np.asarray(mesh.vertices,  dtype=np.float64))
-        o3d_mesh.triangles = o3d.utility.Vector3iVector(np.asarray(mesh.faces,     dtype=np.int32))
+        o3d_mesh.vertices  = o3d.utility.Vector3dVector(src_verts)
+        o3d_mesh.triangles = o3d.utility.Vector3iVector(np.asarray(mesh.faces, dtype=np.int32))
         o3d_mesh = o3d_mesh.filter_smooth_laplacian(number_of_iterations=iterations)
         o3d_mesh.compute_vertex_normals()
 
-        return trimesh.Trimesh(
+        result = trimesh.Trimesh(
             vertices=np.asarray(o3d_mesh.vertices),
             faces=np.asarray(o3d_mesh.triangles),
             process=False,
         )
+        if src_colors is not None:
+            _paste_vertex_colors(src_verts, src_colors, result)
+        return result
     except Exception:
         return mesh
 
@@ -320,9 +352,12 @@ def smooth_mesh_taubin(
         import open3d as o3d  # type: ignore
         import trimesh  # type: ignore
 
+        src_verts  = np.asarray(mesh.vertices, dtype=np.float64)
+        src_colors = _copy_vertex_colors(mesh)
+
         o3d_mesh = o3d.geometry.TriangleMesh()
-        o3d_mesh.vertices  = o3d.utility.Vector3dVector(np.asarray(mesh.vertices,  dtype=np.float64))
-        o3d_mesh.triangles = o3d.utility.Vector3iVector(np.asarray(mesh.faces,     dtype=np.int32))
+        o3d_mesh.vertices  = o3d.utility.Vector3dVector(src_verts)
+        o3d_mesh.triangles = o3d.utility.Vector3iVector(np.asarray(mesh.faces, dtype=np.int32))
         o3d_mesh = o3d_mesh.filter_smooth_taubin(
             number_of_iterations=iterations,
             lambda_filter=lambda_factor,
@@ -330,11 +365,14 @@ def smooth_mesh_taubin(
         )
         o3d_mesh.compute_vertex_normals()
 
-        return trimesh.Trimesh(
+        result = trimesh.Trimesh(
             vertices=np.asarray(o3d_mesh.vertices),
             faces=np.asarray(o3d_mesh.triangles),
             process=False,
         )
+        if src_colors is not None:
+            _paste_vertex_colors(src_verts, src_colors, result)
+        return result
     except Exception:
         return mesh
 

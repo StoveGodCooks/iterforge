@@ -26,6 +26,9 @@ build/
 src-tauri/target/
 Cargo.lock
 
+# ── Vendored third-party repos ──────────────────────────────────
+interforge-backend/vendor/
+
 # ── AI model weights (large binary files) ───────────────────────
 # Models are downloaded on first run — never commit weights
 interforge-backend/models/
@@ -71,3 +74,7 @@ desktop.ini
 .env.*.local
 *.pem
 secrets.json
+
+# ── Vendored third-party source (TripoSR etc.) ───────────────────
+# Cloned by the user on setup, not tracked in InterForge.
+interforge-backend/vendor/

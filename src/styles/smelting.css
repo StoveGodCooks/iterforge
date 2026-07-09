@@ -59,13 +59,14 @@
   user-select: text;
 }
 
-/* Locked prospect preview at top of panel */
+/* Locked prospect preview — yellow-top forge plate */
 .smelt__source {
   border: 1px solid var(--steel-edge);
   border-top: 2px solid var(--yellow-core);
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--steel-mid);
+  box-shadow: inset 0 1px 0 rgba(240, 184, 40, 0.07);
 }
 
 .smelt__source-header {
@@ -105,6 +106,92 @@
   font-size: var(--text-xs);
 }
 
+/* ── Character prompt box (SPRITE / tiled — prompt-driven) ──── */
+.smelt__prompt-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--steel-edge);
+  border-top: 2px solid var(--yellow-core);
+  border-radius: var(--radius-lg);
+  background: var(--steel-mid);
+  box-shadow: inset 0 1px 0 rgba(240, 184, 40, 0.07);
+}
+
+.smelt__prompt-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.smelt__prompt-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--bg-border);
+  border-radius: var(--radius-md);
+  background: var(--bg-deep, #14110c);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.smelt__prompt-input:focus {
+  outline: none;
+  border-color: var(--yellow-core);
+}
+
+.smelt__prompt-input:disabled {
+  opacity: 0.5;
+}
+
+.smelt__asset-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.smelt__asset-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.smelt__asset-select {
+  flex: 1;
+  padding: var(--space-1, 4px) var(--space-2);
+  border: 1px solid var(--bg-border);
+  border-radius: var(--radius-md);
+  background: var(--bg-deep, #14110c);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}
+
+/* Live generation progress line (heartbeat elapsed-time feedback) */
+.smelt__gen-progress {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-align: center;
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--steel-edge);
+  border-radius: var(--radius-md);
+  background: var(--steel-mid);
+  animation: pulse-opacity 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+  0%, 100% { opacity: 0.65; }
+  50%      { opacity: 1; }
+}
+
 
 /* ── Panel footer: generate all + lock ───────────────────── */
 .smelt__panel-footer {
@@ -119,43 +206,45 @@
 .smelt__gen-all-btn {
   width: 100%;
   height: 40px;
-  background: var(--yellow-core);
+  background: var(--forge-gradient);
   color: #000;
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  box-shadow: 0 2px 12px rgba(240, 184, 40, 0.20);
+  transition: filter var(--transition-fast), box-shadow var(--transition-fast);
 }
-.smelt__gen-all-btn:hover { background: var(--yellow-bright); box-shadow: var(--shadow-yellow); }
+.smelt__gen-all-btn:hover { filter: brightness(1.1); box-shadow: var(--shadow-forge); }
 .smelt__gen-all-btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
 
 .smelt__lock-btn {
   width: 100%;
   height: 40px;
-  background: var(--ember-core);
+  background: linear-gradient(135deg, var(--ember-bright), var(--ember-core));
   color: #fff;
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  box-shadow: 0 2px 12px rgba(232, 98, 26, 0.22);
+  transition: filter var(--transition-fast), box-shadow var(--transition-fast);
 }
-.smelt__lock-btn:hover { background: var(--ember-bright); box-shadow: var(--shadow-ember); }
+.smelt__lock-btn:hover { filter: brightness(1.1); box-shadow: var(--shadow-ember); }
 .smelt__lock-btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
 
 /* Progress row — n / 4 views done */
@@ -183,6 +272,11 @@
   gap: var(--space-2);
   padding: var(--space-3);
   overflow: hidden;
+  /* Forge ambient — warm glow bleeds into the multi-view workspace */
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(240, 184, 40, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 100%, rgba(232, 98, 26, 0.04) 0%, transparent 40%),
+    var(--bg-void);
 }
 
 /* ── Single view panel ──────────────────────────────────── */
@@ -256,6 +350,19 @@
   flex-shrink: 0;
 }
 
+/* Generating state — header gets a forge-fire shimmer border */
+.view-panel--generating .view-header {
+  background: linear-gradient(90deg, rgba(240, 184, 40, 0.08), rgba(232, 98, 26, 0.06));
+  border-bottom-color: rgba(240, 184, 40, 0.20);
+}
+
+.view-panel--generating .view-label {
+  background: var(--forge-gradient-h);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 .view-header__left {
   display: flex;
   align-items: center;
@@ -300,7 +407,12 @@
 .view-img-area img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* contain (not cover) prevents leg/head cropping when the character is
+     taller than the grid cell.  object-position: center bottom grounds
+     the figure so feet stay visible and the negative space appears above
+     the head, matching how the user reads sprite frames. */
+  object-fit: contain;
+  object-position: center bottom;
   display: block;
   transition: transform var(--transition-slow);
 }
@@ -376,11 +488,11 @@
 }
 
 .view-btn--regen {
-  background: rgba(200, 150, 10, 0.1);
+  background: rgba(240, 184, 40, 0.1);
   color: var(--yellow-bright);
-  border: 1px solid rgba(200, 150, 10, 0.25);
+  border: 1px solid rgba(240, 184, 40, 0.25);
 }
-.view-btn--regen:hover { background: rgba(200, 150, 10, 0.2); }
+.view-btn--regen:hover { background: rgba(240, 184, 40, 0.2); }
 
 .view-btn--reject {
   background: rgba(231, 76, 60, 0.1);
@@ -425,8 +537,8 @@
   border-top: 2px solid var(--yellow-core);
   border-radius: var(--radius-xl);
   overflow: hidden;
-  max-width: 680px;
-  width: 90%;
+  max-width: 1080px;
+  width: 92%;
   box-shadow: var(--shadow-yellow-strong);
   animation: slide-in-right var(--transition-normal) forwards;
 }
@@ -452,9 +564,147 @@
 .smelt__lightbox-img {
   width: 100%;
   display: block;
-  max-height: 600px;
+  max-height: 82vh;
   object-fit: contain;
+  object-position: center bottom;
   background: var(--bg-void);
+}
+
+/* ── Mode toggle (2D / 3D) ──────────────────────────────────── */
+.smelt__mode-toggle {
+  display: flex;
+  background: var(--bg-void);
+  border: 1px solid var(--bg-border);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.smelt__mode-btn {
+  flex: 1;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.smelt__mode-btn:hover {
+  color: var(--text-secondary);
+}
+.smelt__mode-btn.active {
+  background: var(--forge-gradient);
+  color: #000;
+}
+
+/* ── 2D mode — 2×2 grid ─────────────────────────────────────── */
+.smelt__grid--2d {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+/* ── Sprite-sheet mode — flow grid of pose frames ───────────── */
+.smelt__grid--sprite {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-auto-rows: minmax(280px, auto);
+}
+.smelt__sprite-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  padding: var(--space-6);
+  border: 1px dashed var(--bg-border);
+  border-radius: var(--radius-md);
+  background: var(--bg-void);
+}
+
+/* ── Pose picker (SPRITE mode panel section) ────────────────── */
+.smelt__pose-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--bg-void);
+  border: 1px solid var(--bg-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-top: var(--space-2);
+}
+.smelt__pose-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.smelt__pose-picker-title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.smelt__pose-picker-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.smelt__pose-chips {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+.smelt__pose-loading {
+  grid-column: 1 / -1;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-2);
+}
+.smelt__pose-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--bg-border);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  color: var(--text-muted);
+}
+.smelt__pose-chip:hover:not(:disabled) {
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
+}
+.smelt__pose-chip.active {
+  border-color: var(--yellow-bright, #ffcc00);
+  background: rgba(255, 200, 0, 0.08);
+  color: var(--text-primary);
+}
+.smelt__pose-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.smelt__pose-chip-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  background: #000;
+  border-radius: 4px;
+}
+.smelt__pose-chip-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-align: center;
+  line-height: 1.1;
 }
 
 /* ── No-prospect warning hint ───────────────────────────────── */

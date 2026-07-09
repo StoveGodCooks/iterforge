@@ -61,7 +61,11 @@ async def run_prospect(job: Job, params: dict) -> None:
     if lighting_tokens:
         full_prompt = f"{full_prompt}, {lighting_tokens}"
 
-    neg_prompt = params.get("neg_prompt", "") or get_negative(asset_type)
+    # Always start with system negatives (BASE + asset-specific) and append
+    # the user's text as *extras* — never let the UI string override the
+    # shadow/multi-object/reflection guardrails.
+    user_extra = (params.get("neg_prompt") or "").strip()
+    neg_prompt = get_negative(asset_type, extra=user_extra)
 
     # Create output dir early so profiler.export() works even on error paths
     out_dir = PROJECTS_ROOT / job.id / "prospect"
@@ -107,10 +111,22 @@ async def run_prospect(job: Job, params: dict) -> None:
         await job.push(progress_event(total_steps, total_steps, "Generation complete"))
         job.checkpoint(1)
 
-        # ── 3. Save raw images ───────────────────────────────────
-        await job.push(log_event(f"Saving {len(images)} image(s)…"))
+        # ── 3. Save raw + rembg + vtracer in one pass ────────────
+        # We used to emit image_ready immediately after save, then run rembg
+        # as a separate post-step. That meant the gallery showed the RAW
+        # image (with shadow / white BG) for ~1-3s before swapping to the
+        # cutout — which looked like rembg wasn't running.
+        # Now we save raw, run rembg + vtracer, THEN emit image_ready with
+        # the rgba_url already populated. The user only ever sees the
+        # cleaned cutout.
+        await job.push(log_event(f"Saving + cleaning {len(images)} image(s)…"))
+
+        # Unload SDXL before rembg so U2Net doesn't fight it for VRAM.
+        with profiler.section("engine_unload", "Unload SDXL pipeline from VRAM"):
+            await asyncio.to_thread(engine.unload)
 
         result_images: list[dict] = []
+        from core.postprocess import save_and_process_image
 
         for i, pil_img in enumerate(images):
             with profiler.section(f"save_img_{i}", f"Save image {i} to disk"):
@@ -120,55 +136,64 @@ async def run_prospect(job: Job, params: dict) -> None:
             rel_raw   = raw_path.relative_to(PROJECTS_ROOT)
             image_url = f"{OUTPUTS_URL}/{rel_raw.as_posix()}"
 
-            result_images.append({
+            rgba_url: str | None = None
+            svg_path: str | None = None
+            svg_data: str | None = None
+
+            # rembg + 5px alpha erode + vtracer — blocking per image so
+            # the UI update sequence stays linear.
+            with profiler.section(f"rembg_img_{i}", f"rembg + vtracer on image {i}"):
+                try:
+                    raw_bytes = raw_path.read_bytes()
+                    processed = await save_and_process_image(
+                        raw_png=raw_bytes,
+                        out_dir=out_dir,
+                        index=i,
+                        detail=0.5,
+                    )
+                    rel_rgba = Path(processed["rgba_path"]).relative_to(PROJECTS_ROOT)
+                    rgba_url = f"{OUTPUTS_URL}/{rel_rgba.as_posix()}"
+                    svg_path = processed["svg_path"]
+                    svg_data = processed["svg_data"]
+                except Exception as exc:
+                    await job.push(log_event(
+                        f"Background removal on image {i} failed (non-fatal): {exc}"
+                    ))
+
+            entry = {
                 "index":     i,
                 "raw_path":  str(raw_path),
                 "image_url": image_url,
-                "rgba_url":  None,
-                "svg_path":  None,
-                "svg_data":  None,
-            })
+                "rgba_url":  rgba_url,
+                "svg_path":  svg_path,
+                "svg_data":  svg_data,
+            }
+            result_images.append(entry)
 
+            # Single emission per image — includes rgba_url if rembg
+            # succeeded. Frontend gallery will immediately render the
+            # cutout instead of the raw shadowed version.
             await job.push(make_event(EventType.IMAGE_READY, {
                 "index":     i,
                 "raw_path":  str(raw_path),
                 "image_url": image_url,
-                "rgba_url":  None,
+                "rgba_url":  rgba_url,
             }))
+            if svg_data is not None:
+                await job.push(make_event(EventType.SVG_READY, {
+                    "index":    i,
+                    "rgba_url": rgba_url,
+                    "svg_data": svg_data,
+                }))
             job.checkpoint(2 + i)
 
     finally:
-        # ── 4. ALWAYS unload engine to free VRAM ────────────────
-        with profiler.section("engine_unload", "Unload SDXL pipeline from VRAM"):
+        # Defensive unload in case an exception fired before the inline
+        # unload above (e.g. SDXL OOM during sampling).
+        try:
             await asyncio.to_thread(engine.unload)
-
-    # ── 5. Post-process — rembg + vtracer ────────────────────
-    await job.push(log_event("Running background removal + vectorisation…"))
-    from core.postprocess import save_and_process_image
-
-    for entry in result_images:
-        idx = entry["index"]
-        with profiler.section(f"rembg_img_{idx}", f"rembg + vtracer on image {idx}"):
-            try:
-                raw_bytes = Path(entry["raw_path"]).read_bytes()
-                processed = await save_and_process_image(
-                    raw_png=raw_bytes,
-                    out_dir=out_dir,
-                    index=idx,
-                    detail=0.5,
-                )
-                rel_rgba = Path(processed["rgba_path"]).relative_to(PROJECTS_ROOT)
-                entry["rgba_url"] = f"{OUTPUTS_URL}/{rel_rgba.as_posix()}"
-                entry["svg_path"] = processed["svg_path"]
-                entry["svg_data"] = processed["svg_data"]
-
-                await job.push(make_event(EventType.SVG_READY, {
-                    "index":    idx,
-                    "rgba_url": entry["rgba_url"],
-                    "svg_data": entry["svg_data"],
-                }))
-            except Exception as exc:
-                await job.push(log_event(f"Post-processing image {idx} failed (non-fatal): {exc}"))
+        except Exception:
+            pass
 
     # ── Export profiler ─────────────────────────────────────────
     try:

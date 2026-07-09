@@ -6,6 +6,62 @@
 /* ── Stage names ─────────────────────────────────────────── */
 export type Stage = "prospecting" | "smelting" | "forge";
 
+/* ── Smelt mode ──────────────────────────────────────────── */
+export type SmeltMode = "3D" | "SPRITE";
+
+/* ── Pose presets (sprite-sheet mode) ────────────────────── */
+export interface PosePreset {
+  name:        string;   // unique id, e.g. "walk_front_a"
+  label:       string;   // "Walk — Front A"
+  direction:   string;   // "front" | "back" | "side"
+  prompt_hint: string;
+}
+
+export interface PoseLibraryResponse {
+  default_sheet: string[];
+  presets:       PosePreset[];
+}
+
+/* New unified pipeline stages (UI-facing) */
+export type PipelineStage =
+  | "prospect"
+  | "smelt"
+  | "forge"
+  | "publish";
+
+export type AppView = PipelineStage | "projects" | "devtools";
+
+/* ── Vision types ───────────────────────────────────────── */
+export interface VisionCard {
+  id: string;
+  imageSrc: string | null;
+  label: string;
+  note: string;
+  tags: string[];
+  pinned: boolean;
+  createdAt: string;
+}
+
+export interface VisionFrame {
+  id: string;
+  imageSrc: string | null;
+  caption: string;
+  createdAt: string;
+}
+
+/* ── Publish modes ──────────────────────────────────────── */
+export type PublishMode = "comic" | "sprite" | "tiles" | "export";
+
+/* ── Stage metadata (for header bar) ────────────────────── */
+export const STAGE_META: Record<AppView, { title: string; subtitle: string }> = {
+  prospect: { title: "Prospect", subtitle: "References, generation & sketch" },
+  smelt:    { title: "Smelt",    subtitle: "Multi-view generation" },
+  forge:    { title: "Forge",    subtitle: "3D mesh pipeline (pinned)" },
+  publish:  { title: "Publish",  subtitle: "Comics, sprites, tiles, export" },
+  projects: { title: "Projects", subtitle: "Creative vault" },
+  devtools: { title: "Dev Tools", subtitle: "Diagnostics & profiling" },
+};
+
 /* ── View angles (Smelting) ─────────────────────────────── */
 export type ViewAngle = "front" | "front_right" | "right" | "back" | "left" | "front_left";
 
@@ -94,8 +150,14 @@ export interface SmeltingOutput {
   /* Silhouette masks — rembg RGBA per view */
   masks: Record<ViewAngle, string | null>;
 
-  /* Single backend job ID — all 6 views come from one Zero123++ pass */
+  /* Single backend job ID */
   smeltJobId: string | null;
+
+  /* Which pipeline generated these views */
+  smeltMode: SmeltMode;
+
+  /* SPRITE mode: the pose preset names generated (folder keys under smelt/) */
+  poses?: string[];
 
   /* Generation settings used */
   prompt: string;

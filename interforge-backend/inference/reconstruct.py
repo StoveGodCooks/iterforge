@@ -113,6 +113,328 @@ def _compute_vol_bounds(fov_deg: float = 30.0, radius: float = 1.5) -> tuple[flo
 
 
 # ═════════════════════════════════════════════════════════════════
+#  Stage 0: Depth-Derived Normal Maps
+# ═════════════════════════════════════════════════════════════════
+
+def depth_to_normals(
+    depth: np.ndarray,
+    focal_length: float = 500.0,
+) -> np.ndarray:
+    """
+    Compute surface normal map from a depth image via finite differences.
+
+    For each pixel, the normal is derived from the depth gradient:
+        nx = D(x+1, y) - D(x-1, y)
+        ny = D(x, y+1) - D(x, y-1)
+        nz = -2.0 / focal_length  (camera convention)
+
+    Parameters
+    ----------
+    depth         : float32 (H, W) depth map (1 = closest, 0 = farthest)
+    focal_length  : camera focal length in pixels (controls normal steepness)
+
+    Returns
+    -------
+    float32 (H, W, 3) normal map, each pixel is a unit vector.
+    RGB encodes XYZ: (0.5, 0.5, 1.0) = flat surface facing camera.
+    """
+    # Finite differences for dx, dy
+    # np.gradient returns (dy, dx) for a 2D array
+    dy, dx = np.gradient(depth)
+
+    # Camera-space normals: nz points toward the camera
+    nz = np.full_like(depth, -2.0 / focal_length)
+
+    normals = np.stack([dx, dy, nz], axis=-1)
+
+    # Normalize to unit length
+    norms = np.linalg.norm(normals, axis=-1, keepdims=True)
+    norms = np.maximum(norms, 1e-8)
+    normals = normals / norms
+
+    # Mask where depth is zero (background)
+    bg = depth < 1e-6
+    normals[bg] = [0.0, 0.0, 1.0]  # flat facing camera
+
+    return normals
+
+
+# ═════════════════════════════════════════════════════════════════
+#  Stage 0b: Per-View Depth Alignment
+# ═════════════════════════════════════════════════════════════════
+
+def align_depth_to_reference(
+    ref_depth: np.ndarray,
+    side_depth: np.ndarray,
+    ref_mask: np.ndarray,
+    side_mask: np.ndarray,
+    ref_extrinsic: np.ndarray,
+    side_extrinsic: np.ndarray,
+    intrinsic: np.ndarray,
+    image_size: int,
+) -> np.ndarray:
+    """
+    Scale+shift a side view's depth to be metrically consistent with the
+    reference (front) depth via least-squares fitting in overlap regions.
+
+    DepthAnything V2 produces relative depth (disparity), not metric.
+    Each view's depth has arbitrary scale and offset. To compare depths
+    across views, we reproject the front view's 3D points into the side
+    view camera and fit:  D_side_corrected = a * D_side_raw + b
+    where (a, b) minimize squared error against the reprojected depth.
+
+    Parameters
+    ----------
+    ref_depth      : float32 (H, W) — reference (front) depth, normalized [0, 1]
+    side_depth     : float32 (H, W) — side view depth to align, normalized [0, 1]
+    ref_mask       : uint8 (H, W)   — reference foreground mask (>0 = foreground)
+    side_mask      : uint8 (H, W)   — side view foreground mask
+    ref_extrinsic  : (4, 4)         — front view world-to-camera
+    side_extrinsic : (4, 4)         — side view world-to-camera
+    intrinsic      : (3, 3)         — camera intrinsic matrix
+    image_size     : int            — image width/height (square)
+
+    Returns
+    -------
+    float32 (H, W) — scale+shift corrected side depth
+    """
+    h = w = image_size
+
+    # ── Step 1: Unproject front depth to 3D world points ────────
+    ref_fg = ref_mask > 128
+    if not ref_fg.any():
+        return side_depth
+
+    ys, xs = np.where(ref_fg)
+    depths_at_fg = ref_depth[ys, xs]
+
+    # Pixel → normalized camera coords
+    fx, fy = intrinsic[0, 0], intrinsic[1, 1]
+    cx, cy = intrinsic[0, 2], intrinsic[1, 2]
+
+    # Camera-space 3D points (from front view)
+    z_cam = depths_at_fg + 1e-6  # avoid division by zero
+    x_cam = (xs.astype(np.float64) - cx) / fx * z_cam
+    y_cam = (ys.astype(np.float64) - cy) / fy * z_cam
+
+    # Front camera → world → side camera
+    pts_cam = np.stack([x_cam, y_cam, z_cam, np.ones_like(z_cam)], axis=0)  # (4, N)
+
+    # Camera → world: invert front extrinsic
+    ref_ext_inv = np.linalg.inv(ref_extrinsic)
+    pts_world = ref_ext_inv @ pts_cam
+
+    # World → side camera
+    pts_side_cam = side_extrinsic @ pts_world
+
+    # ── Step 2: Project into side view image plane ──────────────
+    z_side = pts_side_cam[2, :]
+    valid = z_side > 1e-4
+
+    u_side = (pts_side_cam[0, valid] / z_side[valid]) * fx + cx
+    v_side = (pts_side_cam[1, valid] / z_side[valid]) * fy + cy
+
+    ui = np.round(u_side).astype(np.int32)
+    vi = np.round(v_side).astype(np.int32)
+
+    in_bounds = (ui >= 0) & (ui < w) & (vi >= 0) & (vi < h)
+    ui = ui[in_bounds]
+    vi = vi[in_bounds]
+    expected_depth = z_side[valid][in_bounds]
+
+    # Only use points that land in side view's foreground
+    side_fg = side_mask > 128
+    in_fg = side_fg[vi, ui]
+    ui = ui[in_fg]
+    vi = vi[in_fg]
+    expected_depth = expected_depth[in_fg]
+
+    if len(expected_depth) < 10:
+        log.info("[reconstruct] Depth alignment: insufficient overlap, returning raw")
+        return side_depth
+
+    # ── Step 3: Least-squares fit: expected = a * side_raw + b ──
+    side_raw = side_depth[vi, ui].astype(np.float64)
+
+    # Build system: [side_raw, 1] @ [a, b]^T = expected
+    A_mat = np.stack([side_raw, np.ones_like(side_raw)], axis=1)
+    result = np.linalg.lstsq(A_mat, expected_depth, rcond=None)
+    a, b = result[0]
+
+    # Sanity check — reject degenerate fits
+    if abs(a) < 0.01 or abs(a) > 100:
+        log.warning(f"[reconstruct] Depth alignment: degenerate fit a={a:.3f}, b={b:.3f} — skipping")
+        return side_depth
+
+    corrected = (side_depth.astype(np.float64) * a + b).astype(np.float32)
+    corrected = np.maximum(corrected, 0.0)
+
+    log.info(f"[reconstruct] Depth alignment: a={a:.3f}, b={b:.3f}, "
+             f"{len(expected_depth)} overlap points")
+
+    return corrected
+
+
+def align_all_depths(
+    view_depths: dict[str, np.ndarray],
+    alpha_masks: dict[str, np.ndarray],
+    image_size: int = 768,
+    fov_deg: float = 30.0,
+    ref_view: str = "front",
+) -> dict[str, np.ndarray]:
+    """
+    Align all side view depths to the reference (front) depth.
+
+    Convenience wrapper around align_depth_to_reference that builds
+    camera matrices internally. Returns aligned depth dict.
+    """
+    K = _build_intrinsic(image_size, fov_deg)
+    ref_ext = _build_extrinsic(ref_view)
+    ref_depth = view_depths.get(ref_view)
+    ref_mask = alpha_masks.get(ref_view)
+
+    if ref_depth is None or ref_mask is None:
+        log.warning("[reconstruct] No reference depth/mask — skipping alignment")
+        return view_depths
+
+    aligned: dict[str, np.ndarray] = {ref_view: ref_depth}
+    for vn, depth in view_depths.items():
+        if vn == ref_view:
+            continue
+        mask = alpha_masks.get(vn)
+        if mask is None:
+            aligned[vn] = depth
+            continue
+        aligned[vn] = align_depth_to_reference(
+            ref_depth, depth, ref_mask, mask,
+            ref_ext, _build_extrinsic(vn), K, image_size,
+        )
+
+    return aligned
+
+
+# ═════════════════════════════════════════════════════════════════
+#  Stage 0c: Cross-View Consistency Enforcement
+# ═════════════════════════════════════════════════════════════════
+
+def enforce_cross_view_consistency(
+    ref_depth: np.ndarray,
+    side_depths: dict[str, np.ndarray],
+    ref_mask: np.ndarray,
+    side_masks: dict[str, np.ndarray],
+    image_size: int,
+    fov_deg: float = 30.0,
+    depth_threshold: float = 0.05,
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """
+    Correct side view depths and silhouettes against the front reference.
+
+    Fully vectorized — no Python loops over pixels.
+
+    For each side view:
+      1. Reproject front depth into side camera space
+      2. Where overlapping pixels disagree beyond threshold, blend toward front
+      3. Expand silhouettes to include reprojected front geometry
+
+    Silhouette shrinking is intentionally NOT done here — the front view
+    only sees ~120° of the object, so it cannot judge whether side-view
+    foreground behind the object is legitimate. Shrinking based on
+    incomplete information destroys valid geometry.
+
+    Parameters
+    ----------
+    ref_depth       : float32 (H, W) — front view depth (ground truth)
+    side_depths     : dict view_name → float32 (H, W) — aligned side depths
+    ref_mask        : uint8 (H, W) — front foreground mask
+    side_masks      : dict view_name → uint8 (H, W) — side foreground masks
+    image_size      : int — image dimension (square)
+    fov_deg         : float — camera field of view
+    depth_threshold : float — max allowed depth disagreement before clamping
+
+    Returns
+    -------
+    (corrected_depths, corrected_masks) — both dicts keyed by view name
+    """
+    h = w = image_size
+    K = _build_intrinsic(image_size, fov_deg)
+    ref_ext = _build_extrinsic("front")
+    ref_ext_inv = np.linalg.inv(ref_ext)
+
+    # ── Unproject all front foreground pixels to 3D ─────────────
+    ref_fg = ref_mask > 128
+    if not ref_fg.any():
+        return side_depths, side_masks
+
+    ys, xs = np.where(ref_fg)
+    z_vals = ref_depth[ys, xs].astype(np.float64)
+
+    fx, fy = K[0, 0], K[1, 1]
+    cx, cy = K[0, 2], K[1, 2]
+
+    x_cam = (xs.astype(np.float64) - cx) / fx * z_vals
+    y_cam = (ys.astype(np.float64) - cy) / fy * z_vals
+    pts_front = np.stack([x_cam, y_cam, z_vals, np.ones_like(z_vals)], axis=0)  # (4, N)
+    pts_world = ref_ext_inv @ pts_front
+
+    corrected_depths: dict[str, np.ndarray] = {}
+    corrected_masks: dict[str, np.ndarray] = {}
+
+    for view_name in side_depths:
+        side_ext = _build_extrinsic(view_name)
+        side_depth = side_depths[view_name].copy()
+        side_mask = side_masks[view_name].copy()
+
+        # Project front 3D points into this side view
+        pts_side = side_ext @ pts_world
+        z_side = pts_side[2, :]
+        visible = z_side > 1e-4
+
+        u = np.full(z_side.shape, -1.0)
+        v = np.full(z_side.shape, -1.0)
+        u[visible] = (pts_side[0, visible] / z_side[visible]) * fx + cx
+        v[visible] = (pts_side[1, visible] / z_side[visible]) * fy + cy
+
+        ui = np.round(u).astype(np.int32)
+        vi = np.round(v).astype(np.int32)
+        in_bounds = visible & (ui >= 0) & (ui < w) & (vi >= 0) & (vi < h)
+
+        ui_valid = ui[in_bounds]
+        vi_valid = vi[in_bounds]
+        expected_z = z_side[in_bounds].astype(np.float32)
+
+        # ── Silhouette expansion (vectorized) ───────────────────
+        # Front geometry must appear inside side silhouette.
+        was_bg = side_mask[vi_valid, ui_valid] < 128
+        side_mask[vi_valid[was_bg], ui_valid[was_bg]] = 255
+        expansion_count = int(was_bg.sum())
+
+        # ── Depth clamping (vectorized) ─────────────────────────
+        # Where side depth disagrees with front projection, blend.
+        side_fg_at_pts = side_mask[vi_valid, ui_valid] > 128
+        side_vals = side_depth[vi_valid, ui_valid]
+
+        # Case 1: side has no depth but front says surface → fill
+        no_depth = side_fg_at_pts & (side_vals < 1e-6)
+        side_depth[vi_valid[no_depth], ui_valid[no_depth]] = expected_z[no_depth]
+
+        # Case 2: depth disagrees → blend (70% front, 30% side)
+        has_depth = side_fg_at_pts & (side_vals >= 1e-6)
+        disagree = has_depth & (np.abs(side_vals - expected_z) > depth_threshold)
+        blended = 0.7 * expected_z[disagree] + 0.3 * side_vals[disagree]
+        side_depth[vi_valid[disagree], ui_valid[disagree]] = blended
+
+        clamp_count = int(no_depth.sum()) + int(disagree.sum())
+
+        log.info(f"[reconstruct] Cross-view '{view_name}': "
+                 f"expanded={expansion_count}, clamped={clamp_count}")
+
+        corrected_depths[view_name] = side_depth
+        corrected_masks[view_name] = side_mask
+
+    return corrected_depths, corrected_masks
+
+
+# ═════════════════════════════════════════════════════════════════
 #  Stage 1: SVG Mask Rasterization
 # ═════════════════════════════════════════════════════════════════
 
@@ -390,6 +712,28 @@ def _build_cameras(
 #  Stage 2b: Visual Hull Carving
 # ═════════════════════════════════════════════════════════════════
 
+# ── View confidence weights ──────────────────────────────────────
+# The front view is the user-locked Prospect image — highest confidence.
+# Other Zero123++ views are AI-generated and may have inconsistencies
+# (especially faces, fine detail). Lower weights let them contribute
+# without overriding the front view when views disagree.
+#
+# In carving: high-weight views fully carve voxels outside their
+# silhouette. Low-weight views only partially reduce occupancy,
+# so a single inconsistent side view can't unilaterally destroy geometry.
+#
+# In coloring: weights scale the color contribution per view.
+
+VIEW_WEIGHTS: dict[str, float] = {
+    "front":       1.0,    # user-locked reference — full authority
+    "front_right": 0.6,    # adjacent to front, reasonably consistent
+    "front_left":  0.6,
+    "right":       0.5,    # further from front, more drift
+    "left":        0.5,
+    "back":        0.4,    # most distant from reference — least reliable
+}
+
+
 def _carve_visual_hull(
     cameras: list[CameraEntry],
     image_size: int,
@@ -397,7 +741,13 @@ def _carve_visual_hull(
     vol_bounds: tuple[float, float],
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Carve a voxel volume using silhouette projection.
+    Carve a voxel volume using weighted silhouette projection.
+
+    The front view (user-locked Prospect image) gets full carving
+    authority — if a voxel is outside the front silhouette, it's gone.
+    Other views use soft carving: voxels outside their silhouette get
+    reduced (not zeroed), so a single inconsistent AI-generated view
+    can't unilaterally destroy geometry that the front view says exists.
 
     Returns (volume_3d, pts_world_4xN) — the 3D occupancy grid and
     the homogeneous world coordinates used for projection.
@@ -416,6 +766,8 @@ def _carve_visual_hull(
     occupied = np.ones(resolution**3, dtype=np.float32)
 
     for view_name, P, mask in cameras:
+        weight = VIEW_WEIGHTS.get(view_name, 0.5)
+
         projected = P @ pts_world
         z = projected[2, :]
 
@@ -432,15 +784,160 @@ def _carve_visual_hull(
         # Only carve voxels we can SEE are outside the object.
         # Out-of-frame / behind camera → no info → keep.
         silhouette_val = np.ones(resolution**3, dtype=np.float32)
-        silhouette_val[in_bounds] = mask[vi[in_bounds], ui[in_bounds]]
+        raw_mask = np.zeros(resolution**3, dtype=np.float32)
+        raw_mask[in_bounds] = mask[vi[in_bounds], ui[in_bounds]]
+
+        # Weighted carving:
+        # - Inside silhouette (raw_mask > 0.3): keep at 1.0
+        # - Outside silhouette: reduce by view weight
+        #   weight=1.0 (front) → silhouette_val = 0 (full carve)
+        #   weight=0.5 (side)  → silhouette_val = 0.5 (soft carve)
+        outside = in_bounds & (raw_mask < 0.3)
+        silhouette_val[outside] = 1.0 - weight
 
         occupied *= silhouette_val
 
         n_remaining = (occupied > 0.3).sum()
-        log.info(f"[reconstruct] After '{view_name}': {n_remaining:,} voxels remain")
+        log.info(f"[reconstruct] After '{view_name}' (w={weight:.1f}): "
+                 f"{n_remaining:,} voxels remain")
 
     volume = occupied.reshape((resolution, resolution, resolution))
     return volume, pts_world
+
+
+# ═════════════════════════════════════════════════════════════════
+#  Stage 2c: Depth-Weighted SDF Contribution
+# ═════════════════════════════════════════════════════════════════
+
+def _fuse_depth_sdf(
+    volume: np.ndarray,
+    view_depths: dict[str, np.ndarray],
+    cameras: list[CameraEntry],
+    image_size: int,
+    vol_bounds: tuple[float, float],
+    depth_weight: float = 0.3,
+) -> np.ndarray:
+    """
+    Add depth surface information into the occupancy volume.
+
+    Silhouette carving only tells you inside/outside the outline — it misses
+    concavities. Depth maps encode where the actual surface IS, not just
+    where the outline ends.
+
+    For each voxel, project into each view with a depth map. If the voxel
+    is significantly IN FRONT of the depth surface (between camera and
+    surface), keep it. If it's significantly BEHIND the surface (farther
+    from camera than the surface), reduce its occupancy — it's inside
+    the object or occluded.
+
+    The depth contribution is blended with the existing silhouette volume
+    rather than replacing it, since depth maps are noisier than silhouettes.
+
+    Parameters
+    ----------
+    volume       : float32 (R, R, R) — existing occupancy from silhouette carving
+    view_depths  : dict view_name → float32 (H, W) — per-view depth maps (aligned)
+    cameras      : list of (name, P_matrix, mask) tuples
+    image_size   : int — image dimension
+    vol_bounds   : (lo, hi) — volume extent in world space
+    depth_weight : float — blend factor for depth contribution (0=ignore, 1=full)
+
+    Returns
+    -------
+    float32 (R, R, R) — refined occupancy volume
+    """
+    resolution = volume.shape[0]
+    lo, hi = vol_bounds
+    h = w = image_size
+
+    # Rebuild voxel grid coordinates
+    lin = np.linspace(lo, hi, resolution)
+    gx, gy, gz = np.meshgrid(lin, lin, lin, indexing="ij")
+    pts_world = np.stack([
+        gx.ravel(), gy.ravel(), gz.ravel(), np.ones(resolution**3)
+    ], axis=1).T  # (4, N)
+
+    # Accumulate depth-based occupancy votes
+    depth_votes = np.zeros(resolution**3, dtype=np.float32)
+    depth_total_weight = np.zeros(resolution**3, dtype=np.float32)
+
+    for view_name, P, mask in cameras:
+        depth_map = view_depths.get(view_name)
+        if depth_map is None:
+            continue
+
+        weight = VIEW_WEIGHTS.get(view_name, 0.5)
+
+        projected = P @ pts_world
+        z_voxel = projected[2, :]
+        in_front = z_voxel > 0.01
+
+        u = np.full(z_voxel.shape, -1.0)
+        v = np.full(z_voxel.shape, -1.0)
+        u[in_front] = projected[0, in_front] / z_voxel[in_front]
+        v[in_front] = projected[1, in_front] / z_voxel[in_front]
+
+        ui = np.round(u).astype(np.int32)
+        vi = np.round(v).astype(np.int32)
+        in_bounds = in_front & (ui >= 0) & (ui < w) & (vi >= 0) & (vi < h)
+
+        # Sample depth at projected positions
+        sampled_depth = np.zeros(resolution**3, dtype=np.float32)
+        sampled_depth[in_bounds] = depth_map[vi[in_bounds], ui[in_bounds]]
+
+        # Only consider pixels with valid depth (foreground)
+        has_depth = in_bounds & (sampled_depth > 1e-6)
+
+        # Depth comparison: voxel z vs surface depth at that pixel
+        # Depth map = disparity (1 = close, 0 = far).
+        # z_voxel = camera-space Z (distance from camera, always positive in front).
+        # We need to check: is this voxel near the surface?
+        #
+        # Convert depth map value to camera-space Z for comparison:
+        # The depth map is relative, so we compare normalized values.
+        # Normalize voxel z to [0, 1] range within the volume bounds.
+        z_norm = np.zeros_like(z_voxel, dtype=np.float32)
+        z_range = z_voxel[has_depth]
+        if len(z_range) > 0:
+            z_min, z_max = z_range.min(), z_range.max()
+            if z_max - z_min > 1e-6:
+                z_norm[has_depth] = (z_voxel[has_depth] - z_min) / (z_max - z_min)
+
+        # Vote: voxel is near surface if its normalized Z ≈ depth map value
+        # (both in [0,1], both = 1 means close to camera)
+        # Large disagreement → voxel is behind surface → reduce occupancy
+        z_diff = np.abs(z_norm - sampled_depth)
+        near_surface = has_depth & (z_diff < 0.15)  # within ~15% of surface
+        behind_surface = has_depth & (z_norm < sampled_depth - 0.15)
+
+        # Near surface → vote to keep
+        depth_votes[near_surface] += weight
+        # Behind surface → vote to carve (negative)
+        depth_votes[behind_surface] -= weight * 0.5
+
+        depth_total_weight[has_depth] += weight
+
+    # Normalize votes to [-1, 1] range
+    has_votes = depth_total_weight > 0
+    depth_score = np.zeros(resolution**3, dtype=np.float32)
+    depth_score[has_votes] = depth_votes[has_votes] / depth_total_weight[has_votes]
+
+    # Convert to multiplier: positive votes → keep, negative → reduce
+    # Score range [-1, 1] → multiplier range [1-depth_weight, 1+depth_weight]
+    # At depth_weight=0.3: multiplier range [0.7, 1.3]
+    depth_mult = np.ones(resolution**3, dtype=np.float32)
+    depth_mult[has_votes] = 1.0 + depth_weight * depth_score[has_votes]
+    depth_mult = np.clip(depth_mult, 0.0, 1.5)
+
+    # Apply to volume
+    flat_vol = volume.ravel() * depth_mult
+    result = np.clip(flat_vol, 0.0, 1.0).reshape(volume.shape)
+
+    n_refined = int((np.abs(depth_mult - 1.0) > 0.01).sum())
+    log.info(f"[reconstruct] Depth SDF fusion: refined {n_refined:,} voxels "
+             f"(weight={depth_weight})")
+
+    return result
 
 
 # ═════════════════════════════════════════════════════════════════
@@ -739,6 +1236,9 @@ def _project_vertex_colors(
         if rgb is None:
             continue
 
+        # Front view (user-locked) gets higher color weight
+        view_weight = VIEW_WEIGHTS.get(view_name, 0.5) * 2.0  # front=2.0, sides=1.0, back=0.8
+
         projected = P @ pts_h
         z = projected[2, :]
         valid = z > 0.01
@@ -754,8 +1254,8 @@ def _project_vertex_colors(
         in_fg = np.zeros(n_verts, dtype=bool)
         in_fg[in_bounds] = mask[vi[in_bounds], ui[in_bounds]] > 0.3
 
-        color_accum[in_fg] += rgb[vi[in_fg], ui[in_fg]]
-        weight_accum[in_fg] += 1.0
+        color_accum[in_fg] += rgb[vi[in_fg], ui[in_fg]] * view_weight
+        weight_accum[in_fg] += view_weight
 
     # Average colors
     has_color = weight_accum > 0
@@ -809,12 +1309,94 @@ def _project_vertex_colors(
 
 
 # ═════════════════════════════════════════════════════════════════
+#  Stage 3b: Eikonal SDF Regularization
+# ═════════════════════════════════════════════════════════════════
+
+def _keep_largest_component_3d(volume: np.ndarray, level: float = 0.3) -> np.ndarray:
+    """
+    Zero out every occupancy island that isn't the largest connected blob.
+
+    Noisy depth fusion + soft side-view carving leaves small disconnected
+    voxel clusters outside the main object (hallucinated shadow fragments,
+    limb-tip flickers from inconsistent Zero123++ views). Poisson then
+    happily reconstructs them as floating polygons.
+
+    Label the binary ``volume > level`` mask, keep only the largest
+    component, and zero everywhere else. Returns a new float32 volume.
+    """
+    from scipy.ndimage import label
+
+    binary = volume > level
+    if not binary.any():
+        return volume
+
+    labeled, n_components = label(binary)
+    if n_components <= 1:
+        return volume
+
+    sizes = np.bincount(labeled.ravel())
+    sizes[0] = 0  # background
+    keep_id = int(sizes.argmax())
+
+    keep = labeled == keep_id
+    n_dropped = int((binary & ~keep).sum())
+    if n_dropped > 0:
+        log.info(
+            f"[reconstruct] Volume cleanup: dropped {n_components - 1} island(s) "
+            f"({n_dropped:,} voxels), kept largest component "
+            f"({int(sizes[keep_id]):,} voxels)"
+        )
+
+    return np.where(keep, volume, 0.0).astype(volume.dtype)
+
+
+def _occupancy_to_sdf(volume: np.ndarray, level: float = 0.3) -> np.ndarray:
+    """
+    Convert a raw occupancy volume to a signed distance field (SDF).
+
+    Raw occupancy has arbitrary gradient magnitudes — marching cubes follows
+    noisy contours and produces jagged spikes wherever views disagree.
+    A proper SDF enforces |∇SDF| = 1 everywhere (the eikonal property),
+    giving marching cubes smooth, physically plausible isosurfaces.
+
+    The SDF is defined as:
+      - Negative inside the object (distance to nearest surface)
+      - Positive outside the object
+      - Zero at the surface (isosurface at level=0.0)
+
+    Uses scipy distance_transform_edt — fast, no extra dependencies.
+    """
+    from scipy.ndimage import distance_transform_edt
+
+    binary = volume > level
+
+    if not binary.any():
+        log.warning("[reconstruct] SDF: volume is empty, returning as-is")
+        return volume
+
+    # Exterior distance: distance from each outside voxel to nearest inside
+    exterior_dist = distance_transform_edt(~binary).astype(np.float32)
+
+    # Interior distance: distance from each inside voxel to nearest outside
+    interior_dist = distance_transform_edt(binary).astype(np.float32)
+
+    # SDF convention: negative inside, positive outside, zero at surface
+    sdf = exterior_dist - interior_dist
+
+    log.info(f"[reconstruct] SDF: range [{sdf.min():.1f}, {sdf.max():.1f}], "
+             f"surface voxels={int((binary & ~(distance_transform_edt(binary) > 1)).sum())}")
+
+    return sdf
+
+
+# ═════════════════════════════════════════════════════════════════
 #  Public API — Full Reconstruction Pipeline
 # ═════════════════════════════════════════════════════════════════
 
 def visual_hull_reconstruct(
     alpha_masks: dict[str, np.ndarray],
     view_images: Optional[dict[str, np.ndarray]] = None,
+    view_depths: Optional[dict[str, np.ndarray]] = None,
     svg_data: Optional[dict[str, str]] = None,
     resolution: int = 256,
     image_size: int = 768,
@@ -825,6 +1407,7 @@ def visual_hull_reconstruct(
     photo_threshold: float = 30.0,
     poisson_depth: int = 8,
     fov_deg: float = 30.0,
+    depth_fusion_weight: float = 0.3,
 ) -> "trimesh.Trimesh":
     """
     Full multi-view 3D reconstruction pipeline.
@@ -832,16 +1415,18 @@ def visual_hull_reconstruct(
     Stages:
       1. Build cameras with SVG or raster masks
       2. Visual hull carving (silhouette projection)
+      2b. Depth SDF fusion (if per-view depths provided)
       3. Photo-consistency refinement (RGB-based concavity carving)
       4. Point cloud extraction with gradient normals
       5. Poisson surface reconstruction (or marching cubes fallback)
       6. Vertex color projection from views
 
-    vol_bounds: If None (default), automatically computed from camera FoV
-                and radius so the volume matches what the cameras can see.
-                Previous hardcoded (-0.8, 0.8) was TOO LARGE for 30° FoV —
-                ~50% of voxels per axis fell outside camera view and could
-                never be carved, creating a massive uncarvable blob.
+    view_depths:  If provided, per-view depth maps are fused into the
+                  occupancy volume to capture concavities that silhouettes
+                  miss. Maps view_name → float32 (H, W) depth in [0, 1].
+    vol_bounds:   If None (default), automatically computed from camera FoV
+                  and radius so the volume matches what the cameras can see.
+    depth_fusion_weight: Blend factor for depth contribution (0=off, 1=full).
     """
     from scipy.ndimage import gaussian_filter
     import trimesh
@@ -868,6 +1453,18 @@ def visual_hull_reconstruct(
         cameras, effective_size, resolution, vol_bounds,
     )
 
+    # ── Stage 2b: Depth SDF fusion ─────────────────────────────
+    if view_depths and depth_fusion_weight > 0:
+        depth_cameras = cameras
+        if effective_size != image_size:
+            depth_cameras, _ = _build_cameras(
+                alpha_masks, None, image_size, image_size,
+            )
+        volume = _fuse_depth_sdf(
+            volume, view_depths, depth_cameras, image_size,
+            vol_bounds, depth_weight=depth_fusion_weight,
+        )
+
     # ── Stage 3: Photo-consistency refinement ───────────────────
     if photo_consistency and view_images:
         # Photo-consistency uses the original image_size for RGB sampling
@@ -887,12 +1484,30 @@ def visual_hull_reconstruct(
     if smooth_sigma > 0:
         volume = gaussian_filter(volume, sigma=smooth_sigma)
 
+    # ── Drop disconnected islands ───────────────────────────────
+    # Carving + depth fusion can leave small blobs floating outside the
+    # main object. Label the occupancy grid and keep only the largest
+    # component so Poisson doesn't reconstruct shadow fragments as
+    # separate mesh shells.
+    volume = _keep_largest_component_3d(volume, level=0.3)
+
+    # ── Eikonal SDF regularization ──────────────────────────────
+    # Convert raw occupancy to a proper signed distance field.
+    # The distance transform naturally enforces |∇SDF| = 1 everywhere,
+    # which eliminates jagged spikes caused by view inconsistencies.
+    # Raw occupancy has arbitrary gradient magnitudes → marching cubes
+    # follows noisy contours. SDF has smooth, unit-gradient contours
+    # → the isosurface is physically plausible.
+    volume = _occupancy_to_sdf(volume, level=0.3)
+    log.info("[reconstruct] Eikonal SDF regularization applied")
+
     # ── Stage 4+5: Point cloud → Poisson (with fallback) ───────
+    # After SDF conversion, isosurface is at 0.0 (not 0.3).
     lo, hi = vol_bounds
     scale = (hi - lo) / resolution
 
     try:
-        points, normals = _extract_oriented_pointcloud(volume, vol_bounds, level=0.3)
+        points, normals = _extract_oriented_pointcloud(volume, vol_bounds, level=0.0)
 
         mesh = _poisson_reconstruct(
             points, normals,
@@ -904,7 +1519,7 @@ def visual_hull_reconstruct(
         log.warning(f"[reconstruct] Poisson failed ({exc}), falling back to marching cubes")
         from skimage.measure import marching_cubes
         try:
-            verts, faces, mc_normals, _ = marching_cubes(volume, level=0.3)
+            verts, faces, mc_normals, _ = marching_cubes(volume, level=0.0)
         except Exception:
             raise RuntimeError("Reconstruction failed — no surface in volume")
 
@@ -941,16 +1556,56 @@ def cleanup_mesh(
     mesh: "trimesh.Trimesh",
     smooth_iterations: int = 3,
     target_faces: Optional[int] = None,
+    keep_largest_component: bool = True,
 ) -> "trimesh.Trimesh":
-    """Post-processing: smooth + decimate + fix normals."""
+    """Post-processing: largest component + Taubin smooth + decimate + fix normals.
+
+    Uses Taubin smoothing (alternating positive/negative Laplacian)
+    instead of plain Laplacian to smooth without volume shrinkage.
+    This prevents organic meshes (characters, creatures) from losing
+    their proportions during cleanup.
+
+    keep_largest_component: splits the mesh into connected components
+        and drops everything except the largest. Poisson reconstruction
+        can leave floating shells near hallucinated side-view geometry;
+        this ensures the final asset is a single solid object. Disable
+        only when you intentionally expect multiple disjoint pieces.
+    """
     import trimesh
+
+    if keep_largest_component:
+        try:
+            components = mesh.split(only_watertight=False)
+            if len(components) > 1:
+                largest = max(components, key=lambda m: len(m.faces))
+                dropped = len(mesh.faces) - len(largest.faces)
+                log.info(
+                    f"[reconstruct] Mesh cleanup: kept largest of "
+                    f"{len(components)} components "
+                    f"(dropped {dropped:,} faces from {len(components) - 1} island(s))"
+                )
+                mesh = largest
+        except Exception as exc:
+            log.warning(f"[reconstruct] Component split failed ({exc}); keeping full mesh")
 
     trimesh.repair.fix_winding(mesh)
     trimesh.repair.fix_normals(mesh)
     trimesh.repair.fill_holes(mesh)
 
     if smooth_iterations > 0:
-        trimesh.smoothing.filter_laplacian(mesh, iterations=smooth_iterations)
+        # Taubin smoothing: lambda=0.5 (smooth), mu=-0.53 (inflate back).
+        # Net effect: smooths noise without shrinking the mesh.
+        # Falls back to basic Laplacian if Taubin fails.
+        try:
+            trimesh.smoothing.filter_taubin(
+                mesh,
+                lamb=0.5,
+                nu=-0.53,
+                iterations=smooth_iterations,
+            )
+        except (AttributeError, TypeError):
+            # Older trimesh versions may not have filter_taubin
+            trimesh.smoothing.filter_laplacian(mesh, iterations=smooth_iterations)
 
     if target_faces and len(mesh.faces) > target_faces:
         mesh = mesh.simplify_quadric_decimation(target_faces)

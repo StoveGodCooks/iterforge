@@ -77,6 +77,23 @@ export default function MeshViewer({ glbUrl }: Props) {
       (gltf) => {
         const model = gltf.scene;
 
+        // Ensure all mesh materials render correctly regardless of normal winding.
+        // Trimesh-exported GLBs can have inverted normals (especially from marching
+        // cubes / Poisson reconstruction) which causes the mesh to appear as a
+        // near-black silhouette due to backface culling. DoubleSide + recomputing
+        // normals when absent fixes this entirely.
+        model.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            const mats = Array.isArray(child.material)
+              ? child.material
+              : [child.material];
+            mats.forEach((m) => { m.side = THREE.DoubleSide; });
+            if (!child.geometry.attributes.normal) {
+              child.geometry.computeVertexNormals();
+            }
+          }
+        });
+
         // Auto-center and scale
         const box = new THREE.Box3().setFromObject(model);
         const center = box.getCenter(new THREE.Vector3());

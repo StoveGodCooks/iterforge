@@ -33,7 +33,7 @@ class ForgeRequest(BaseModel):
     tinker_mode: bool = False
 
     # Pipeline settings
-    reconstruction_path: str = "auto"       # "organic" | "hard_surface" | "auto"
+    reconstruction_path: str = "auto"       # "organic" | "hard_surface" | "none" | "auto"
     export_format: str = "glb"              # "glb" | "fbx" | "obj"
     target_poly_count: int = 5000
     resume_from_step: int = 0              # checkpoint resume (0 = fresh run)
@@ -45,7 +45,7 @@ async def start_forge(req: ForgeRequest):
     Start the Forge mesh pipeline.
     Returns job_id immediately — subscribe to SSE stream for progress.
     """
-    has_smelt_inputs = bool((req.smelt_job_id or "").strip())
+    has_smelt_inputs    = bool((req.smelt_job_id or "").strip())
     has_tinker_prospect = req.tinker_mode and bool((req.prospect_job_id or "").strip())
 
     if not has_smelt_inputs and not has_tinker_prospect:

@@ -22,13 +22,13 @@ from pathlib import Path
 # ── GPU memory management ────────────────────────────────────
 # Prevent VRAM fragmentation OOM on 8GB cards.
 # Must be set BEFORE torch is imported anywhere.
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128")
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128,expandable_segments:True")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api import jobs, prospect, smelt, forge, status, masterforge, setup, dev
+from api import jobs, prospect, smelt, forge, forge2d, status, masterforge, setup, dev, publish, poses
 
 # Ensure the projects output root exists before mounting
 PROJECTS_ROOT = Path.home() / "interforge-projects"
@@ -71,7 +71,10 @@ app.include_router(jobs.router)
 app.include_router(prospect.router)
 app.include_router(smelt.router)
 app.include_router(forge.router)
+app.include_router(forge2d.router)
 app.include_router(masterforge.router)
+app.include_router(publish.router)
+app.include_router(poses.router)
 app.include_router(dev.router)
 
 # Serve generated images as static files.

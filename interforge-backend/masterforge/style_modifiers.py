@@ -64,11 +64,12 @@ STYLE_MODIFIERS: dict[str, StyleModifier] = {
     "stylized": StyleModifier(
         id="stylized",
         name="Stylized",
-        prompt_prefix="stylized, semi-realistic, game art style,",
-        prompt_suffix="clean shapes, appealing design, slightly exaggerated proportions, masterpiece, best quality, highly detailed, sharp focus",
+        prompt_prefix="stylized 3D game asset, clean stylized render, matte shading,",
+        prompt_suffix="smooth simple forms, appealing design",
         cfg_delta=0.0,
         steps_delta=5,
-        description="The general-purpose game art style. Balanced realism vs style.",
+        description="Clean stylized 3D-render game-asset look — SF3D-friendly (default). "
+                    "NOT semi-realistic: photoreal detail/lighting reconstructs poorly.",
     ),
     "sketch": StyleModifier(
         id="sketch",

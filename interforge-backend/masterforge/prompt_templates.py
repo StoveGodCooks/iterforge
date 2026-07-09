@@ -24,41 +24,52 @@ class PromptTemplate:
 
 # 3D asset types — need strong isolation for clean reconstruction
 TEMPLATES_3D: dict[str, PromptTemplate] = {
+    # ── 3D asset templates ────────────────────────────────────
+    # RULE: NEVER put "no X" phrases ("no shadow", "no reflection") in the
+    # POSITIVE prompt. SDXL tokenizes "no shadow" as "no" + "shadow" and
+    # weights "shadow" normally — so you're effectively asking for shadows.
+    # Negation belongs in the negative prompt. Use POSITIVE cues here:
+    # "floating", "levitating", "isolated on pure white", "shadowless lighting"
+    # (that last is OK as a single token — it's a photography term).
+    # Also NEVER "studio lighting" — it implies key/fill/shadow rigs.
     "prop": PromptTemplate(
-        prefix="a single game prop, one object only, centered, front view,",
-        suffix="isolated on pure white background, studio lighting, sharp focus, highly detailed, professional 3d asset render",
+        prefix="single game prop, one object only, isolated on pure white, floating, centered, front view,",
+        suffix="pure white background, shadowless flat lighting, clean silhouette, sharp focus, highly detailed, professional 3d asset render",
     ),
     "weapon": PromptTemplate(
-        prefix="a single fantasy weapon, one weapon only, centered, full weapon in frame,",
-        suffix="isolated on pure white background, studio lighting, sharp metalwork, highly detailed, professional game art",
+        prefix="single fantasy weapon, one weapon only, isolated on pure white, floating, levitating, centered, full weapon visible,",
+        suffix="pure white background, shadowless overhead lighting, clean silhouette, sharp metalwork, highly detailed, professional game art",
     ),
     "armor": PromptTemplate(
-        prefix="a single armor set, one armor only, centered, full armor display,",
-        suffix="isolated on pure white background, studio lighting, sharp detail, highly detailed, professional game art",
+        prefix="single armor set, one armor only, isolated on pure white, floating, centered, full armor display,",
+        suffix="pure white background, shadowless flat lighting, clean silhouette, sharp detail, highly detailed, professional game art",
     ),
     "character": PromptTemplate(
-        prefix="a single character, one character only, centered, full body, front facing,",
-        suffix="isolated on pure white background, studio lighting, sharp focus, highly detailed, professional character art",
+        # SF3D-tuned: ¾ view + figure filling a square frame reconstructs far
+        # better than the old "full body, front facing" (built for silhouette
+        # carving). Dropped the detail/silhouette cues that pushed photoreal.
+        prefix="single stylized character, one character only, isolated on pure white, centered, three-quarter front view, full figure filling the frame,",
+        suffix="pure white background, even flat lighting, clean stylized 3d game character",
     ),
     "creature": PromptTemplate(
-        prefix="a single fantasy creature, one creature only, centered,",
-        suffix="isolated on pure white background, studio lighting, sharp focus, highly detailed, professional game art",
+        prefix="single stylized fantasy creature, one creature only, isolated on pure white, centered, three-quarter view, figure filling the frame,",
+        suffix="pure white background, even flat lighting, clean stylized 3d game creature",
     ),
     "vehicle": PromptTemplate(
-        prefix="a single vehicle, one vehicle only, centered, side view,",
-        suffix="isolated on pure white background, studio lighting, sharp detail, highly detailed, professional game art",
+        prefix="single vehicle, one vehicle only, isolated on pure white, floating, centered, side view,",
+        suffix="pure white background, shadowless flat lighting, clean silhouette, sharp detail, highly detailed, professional game art",
     ),
     "building": PromptTemplate(
-        prefix="a single building, one structure only, centered,",
-        suffix="isolated on pure white background, clean separation, highly detailed, professional architectural game art",
+        prefix="single building, one structure only, isolated on pure white, floating, centered,",
+        suffix="pure white background, shadowless flat lighting, clean silhouette, clean separation, highly detailed, professional architectural game art",
     ),
     "dungeon_tile": PromptTemplate(
-        prefix="a single dungeon tile, one tile only, centered, top-down view,",
-        suffix="isolated on pure white background, modular tile, sharp edges, professional game art",
+        prefix="single dungeon tile, one tile only, isolated on pure white, centered, top-down view,",
+        suffix="pure white background, flat top-down lighting, modular tile, sharp edges, professional game art",
     ),
     "foliage": PromptTemplate(
-        prefix="a single plant, one plant only, centered,",
-        suffix="isolated on pure white background, studio lighting, natural detail, professional game vegetation art",
+        prefix="single plant, one plant only, isolated on pure white, floating, centered,",
+        suffix="pure white background, shadowless flat lighting, clean silhouette, natural detail, professional game vegetation art",
     ),
 }
 

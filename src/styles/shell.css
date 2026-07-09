@@ -1,0 +1,333 @@
+/* ============================================================
+   Shell layout — Rail, Header Bar, Asset Tray
+   Ported from mockup/index.html design tokens.
+   ============================================================ */
+
+/* ── App Shell (top-level flex) ────────────────────────────── */
+.app-shell {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg-void);
+}
+
+/* ── Stage Rail (left) ─────────────────────────────────────── */
+.rail {
+  width: var(--rail-w);
+  min-width: var(--rail-w);
+  background: var(--bg-base);
+  border-right: 1px solid rgba(160, 175, 200, 0.07);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 14px;
+  gap: 2px;
+  z-index: 10;
+  flex-shrink: 0;
+  /* Subtle inner-right metallic sheen like the logo frame edge */
+  box-shadow: inset -1px 0 0 rgba(140, 160, 190, 0.04);
+}
+
+.rail__logo {
+  width: 148px;
+  height: 148px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.rail__logo img {
+  width: 144px;
+  height: 144px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 0 18px rgba(212, 154, 16, 0.5))
+    drop-shadow(0 4px 24px rgba(0, 0, 0, 0.8));
+}
+
+.rail__btn {
+  width: 140px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--steel-shine);
+  cursor: pointer;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 14px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-family: var(--font-sans);
+  transition: all 0.15s ease;
+  position: relative;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.rail__btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.rail__btn:hover {
+  background: rgba(160, 175, 200, 0.05);
+  border-color: rgba(160, 175, 200, 0.08);
+  color: var(--text-primary);
+}
+
+.rail__btn.active {
+  color: var(--yellow-bright);
+  background: var(--forge-glow-bg);
+  border-color: rgba(240, 184, 40, 0.20);
+}
+
+.rail__btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 22px;
+  border-radius: 0 3px 3px 0;
+  background: var(--forge-gradient);
+  box-shadow: 0 0 8px rgba(240, 184, 40, 0.5);
+}
+
+.rail__spacer {
+  flex: 1;
+}
+
+.rail__btn--bottom {
+  opacity: 0.55;
+}
+.rail__btn--bottom:hover {
+  opacity: 1;
+}
+.rail__btn--bottom.active {
+  opacity: 1;
+}
+
+/* ── Main Area ─────────────────────────────────────────────── */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Header Bar ────────────────────────────────────────────── */
+.header {
+  height: var(--header-h);
+  min-height: var(--header-h);
+  background: var(--bg-base);
+  border-bottom: 1px solid rgba(160, 175, 200, 0.07);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.header__title {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  -webkit-app-region: no-drag;
+}
+
+.header__subtitle {
+  font-size: 12px;
+  color: var(--steel-shine);
+  -webkit-app-region: no-drag;
+}
+
+.header__spacer {
+  flex: 1;
+}
+
+.header__pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 12px;
+  border-radius: 20px;
+  background: var(--forge-glow-bg);
+  color: var(--yellow-bright);
+  border: 1px solid rgba(240, 184, 40, 0.25);
+  -webkit-app-region: no-drag;
+}
+
+.header__btn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(160, 175, 200, 0.12);
+  background: rgba(160, 175, 200, 0.04);
+  color: var(--steel-shine);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: var(--font-sans);
+  -webkit-app-region: no-drag;
+}
+
+.header__btn:hover {
+  border-color: rgba(240, 184, 40, 0.35);
+  color: var(--yellow-bright);
+  background: var(--yellow-dim);
+}
+
+/* ── Content + Tray wrapper ────────────────────────────────── */
+.content-wrap {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.workspace {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  background: var(--bg-void);
+  animation: fade-in var(--transition-normal) forwards;
+}
+
+/* ── Asset Tray (right) ────────────────────────────────────── */
+.tray {
+  width: var(--tray-w);
+  min-width: var(--tray-w);
+  background: var(--bg-base);
+  border-left: 1px solid var(--bg-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.2s ease, min-width 0.2s ease;
+}
+
+.tray__header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--bg-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tray__title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+.tray__toggle {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  font-family: var(--font-sans);
+}
+.tray__toggle:hover {
+  color: var(--text-primary);
+}
+
+.tray__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.tray__thumb {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: grab;
+  border: 1px solid var(--bg-border);
+  position: relative;
+  transition: border-color 0.12s;
+}
+.tray__thumb:hover {
+  border-color: var(--yellow-core);
+}
+.tray__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tray__thumb-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 8px;
+  font-weight: 600;
+  text-align: center;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tray__empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 24px 12px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ── Window control buttons (reused from old titlebar) ────── */
+.win-btn {
+  width: 28px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  -webkit-app-region: no-drag;
+}
+.win-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+.win-btn--close:hover {
+  background: var(--status-error);
+  color: #fff;
+}

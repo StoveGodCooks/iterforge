@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import "../../styles/anvil.css";
@@ -39,11 +39,32 @@ const STICKER_PRESETS: Array<{ id: StickerPreset; label: string }> = [
   { id: "crosshair", label: "Target" },
   { id: "tag", label: "Tag" },
 ];
+const SECTION_HELP: Record<string, string> = {
+  "Sketch":         "Brush for broad silhouette strokes and paintovers. Pen for tight, clean linework. Eraser to refine edges.",
+  "Lines & Shapes": "Use Line and Curve for structural guides and perspective rails. Rect and Ellipse block out hard and rounded forms.",
+  "Notes":          "Text stamps a single label at click position. TextBox drops a framed callout. Sticker places quick visual markers.",
+};
+
 const TOOL_GROUPS: Array<{ title: string; tools: Tool[] }> = [
   { title: "Sketch", tools: ["brush", "pen", "eraser"] },
   { title: "Lines & Shapes", tools: ["line", "curve", "rectangle", "filledRectangle", "ellipse", "filledEllipse"] },
   { title: "Notes", tools: ["text", "textbox", "sticker"] },
 ];
+
+const TOOL_ICON_PATHS: Record<Tool, string> = {
+  brush:           "M3 18 Q8 10 13 8 Q17 6 18 8 Q19 10 16 13 Q11 17 4 21",
+  pen:             "M4 20 L14 10 L17 13 L7 23 Z M14 10 L18 4 L22 8 L18 12",
+  eraser:          "M3 18 L10 11 L15 16 L8 23 Z M15 16 L20 11 M3 23 L9 23",
+  line:            "M4 20 L20 4",
+  curve:           "M4 20 Q12 2 20 20",
+  rectangle:       "M4 5 H20 V19 H4 Z",
+  filledRectangle: "M4 5 H20 V19 H4 Z M7 8 H17 M7 12 H17 M7 16 H14",
+  ellipse:         "M12 4 A8 8 0 1 1 12 20 A8 8 0 1 1 12 4",
+  filledEllipse:   "M12 4 A8 8 0 1 1 12 20 A8 8 0 1 1 12 4 M9 12 H15 M12 9 V15",
+  text:            "M4 7 H20 M12 7 V18 M8 18 H16",
+  textbox:         "M3 4 H21 V20 H3 Z M7 9 H17 M7 13 H14",
+  sticker:         "M12 2 L14.5 9.5 H22 L16 14 L18.5 21.5 L12 17 L5.5 21.5 L8 14 L2 9.5 H9.5 Z",
+};
 
 export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -107,24 +128,8 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
     sticker: "Quick marker",
   };
 
-  const toolGuidance: Record<Tool, string> = {
-    brush: "Use the brush for silhouette mass, paintovers, and big directional passes.",
-    pen: "Use the pen when the gesture is set and you need a cleaner line read.",
-    eraser: "Cut noise, refine edge rhythm, and keep the board readable.",
-    line: "Drop clean structural lines for perspective, framing, and axis breaks.",
-    curve: "Pull sweeping guides for motion arcs, blade edges, horns, and contour flow.",
-    rectangle: "Block hard-surface forms, framing zones, and panel boundaries fast.",
-    filledRectangle: "Use solid rectangles to map weight, value grouping, and large planes.",
-    ellipse: "Mark sockets, wheels, joints, and rounded guide volumes.",
-    filledEllipse: "Use solid ellipses for dense mass reads, lights, and circular callouts.",
-    text: "Place a short note exactly where the decision matters.",
-    textbox: "Drop a labeled note box when the callout needs more separation from the drawing.",
-    sticker: "Stamp quick visual markers without redrawing the same helper shape each time.",
-  };
-
   const canUndo = historyTick >= 0 && historyRef.current.length > 1;
   const canRedo = historyTick >= 0 && redoRef.current.length > 0;
-  const actionCount = Math.max(0, historyRef.current.length - 1);
 
   function isShapeTool(value: Tool): value is ShapeTool {
     return SHAPE_TOOLS.includes(value as ShapeTool);
@@ -557,35 +562,15 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
     <div className={`anvil-shell ${embedded ? "anvil-shell--embedded" : ""}`}>
       {!embedded && <div className="anvil-shell__scrim" onClick={onClose} />}
       <div className="anvil-shell__panel">
-        <div className="anvil-shell__header">
-          <div className="anvil-shell__header-copy">
-            <span className="anvil-shell__eyebrow">{embedded ? "Prospecting Visual Helper" : "Forge Drafting Helper"}</span>
-            <h2 className="anvil-shell__title">Anvil</h2>
-            <p className="anvil-shell__subtitle">
-              A cleaner drafting pad for silhouettes, notes, layout guides, and fast visual decisions before generation.
-            </p>
-          </div>
-
-          <div className="anvil-shell__header-meta">
-            <div className="anvil-shell__meta-chip">
-              <span className="anvil-shell__meta-label">Active Tool</span>
-              <strong>{toolLabels[tool]}</strong>
-            </div>
-            <div className="anvil-shell__meta-chip">
-              <span className="anvil-shell__meta-label">Board Actions</span>
-              <strong>{actionCount}</strong>
-            </div>
-            <div className="anvil-shell__meta-chip">
-              <span className="anvil-shell__meta-label">Canvas Fit</span>
-              <strong>Auto</strong>
-            </div>
-          </div>
-
-          <div className="anvil-shell__header-actions">
-            <button className="anvil-shell__action" onClick={undo} disabled={!canUndo}>Undo</button>
-            <button className="anvil-shell__action" onClick={redo} disabled={!canRedo}>Redo</button>
-            <button className="anvil-shell__action" onClick={openImportDialog}>Import Ref</button>
-            <button className="anvil-shell__action" onClick={clearBoard}>Clear</button>
+        {/* Compact toolbar — replaces the old verbose header */}
+        <div className="anvil-shell__bar">
+          <span className="anvil-shell__bar-title">Anvil</span>
+          <span className="anvil-shell__bar-tool">{toolLabels[tool]}</span>
+          <div className="anvil-shell__bar-actions">
+            <button className="anvil-shell__action" onClick={undo} disabled={!canUndo} title="Undo">↩ Undo</button>
+            <button className="anvil-shell__action" onClick={redo} disabled={!canRedo} title="Redo">↪ Redo</button>
+            <button className="anvil-shell__action" onClick={openImportDialog} title="Import reference image">Import Ref</button>
+            <button className="anvil-shell__action" onClick={clearBoard} title="Clear board">Clear</button>
             <button className="anvil-shell__action anvil-shell__action--primary" onClick={exportPng}>Export PNG</button>
             {onClose && (
               <button className="anvil-shell__close" onClick={onClose}>{embedded ? "Back" : "Close"}</button>
@@ -595,31 +580,37 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
 
         <div className="anvil-shell__workspace">
           <aside className="anvil-shell__tools panel panel--forge">
-            <div className="anvil-shell__section">
-              <span className="anvil-shell__label">Helper Read</span>
-              <p className="anvil-shell__helper-copy">{toolGuidance[tool]}</p>
-            </div>
 
+            {/* Tool groups with inline help bubbles */}
             {TOOL_GROUPS.map((group) => (
               <div className="anvil-shell__section" key={group.title}>
-                <span className="anvil-shell__label">{group.title}</span>
+                <div className="anvil-shell__section-header">
+                  <span className="anvil-shell__label">{group.title}</span>
+                  <HelpBubble text={SECTION_HELP[group.title] ?? ""} />
+                </div>
                 <div className="anvil-shell__tool-grid">
                   {group.tools.map((groupTool) => (
                     <button
                       key={groupTool}
                       className={`anvil-shell__tool-btn ${tool === groupTool ? "anvil-shell__tool-btn--active" : ""}`}
                       onClick={() => setTool(groupTool)}
+                      title={toolCaptions[groupTool]}
                     >
-                      <strong>{toolLabels[groupTool]}</strong>
-                      <span>{toolCaptions[groupTool]}</span>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d={TOOL_ICON_PATHS[groupTool]} />
+                      </svg>
+                      <span>{toolLabels[groupTool]}</span>
                     </button>
                   ))}
                 </div>
               </div>
             ))}
 
+            {/* Size — relevant for all stroke tools */}
             <div className="anvil-shell__section">
-              <span className="anvil-shell__label">{tool === "pen" ? "Pen Weight" : "Brush Size"}</span>
+              <div className="anvil-shell__section-header">
+                <span className="anvil-shell__label">{tool === "pen" ? "Pen Weight" : "Brush Size"}</span>
+              </div>
               <div className="anvil-shell__slider-row">
                 <input
                   className="anvil-shell__slider"
@@ -634,8 +625,11 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
               </div>
             </div>
 
+            {/* Palette */}
             <div className="anvil-shell__section">
-              <span className="anvil-shell__label">Palette</span>
+              <div className="anvil-shell__section-header">
+                <span className="anvil-shell__label">Palette</span>
+              </div>
               <div className="anvil-shell__swatches">
                 {SWATCHES.map((swatch) => (
                   <button
@@ -649,40 +643,38 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
               </div>
             </div>
 
-            <div className="anvil-shell__section">
-              <span className="anvil-shell__label">{tool === "sticker" ? "Sticker Preset" : "Text / Box Copy"}</span>
-              {tool === "sticker" ? (
-                <div className="anvil-shell__chip-row">
-                  {STICKER_PRESETS.map((preset) => (
-                    <button
-                      key={preset.id}
-                      className={`anvil-shell__chip ${stickerPreset === preset.id ? "anvil-shell__chip--active" : ""}`}
-                      onClick={() => setStickerPreset(preset.id)}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
+            {/* Text / Sticker — only shown when those tools are active */}
+            {(tool === "text" || tool === "textbox" || tool === "sticker") && (
+              <div className="anvil-shell__section">
+                <div className="anvil-shell__section-header">
+                  <span className="anvil-shell__label">
+                    {tool === "sticker" ? "Sticker Preset" : "Text Copy"}
+                  </span>
                 </div>
-              ) : (
-                <textarea
-                  className="anvil-shell__text-input anvil-shell__text-input--multi"
-                  value={textValue}
-                  onChange={(event) => setTextValue(event.target.value)}
-                  placeholder="Add callout text"
-                  rows={3}
-                />
-              )}
-            </div>
-
-            <div className="anvil-shell__section">
-              <span className="anvil-shell__label">Board State</span>
-              <div className="anvil-shell__status-card">
-                <p className="anvil-shell__status">{status}</p>
-                <p className="anvil-shell__status anvil-shell__status--meta">
-                  History: {actionCount} action{actionCount === 1 ? "" : "s"}
-                </p>
+                {tool === "sticker" ? (
+                  <div className="anvil-shell__chip-row">
+                    {STICKER_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        className={`anvil-shell__chip ${stickerPreset === preset.id ? "anvil-shell__chip--active" : ""}`}
+                        onClick={() => setStickerPreset(preset.id)}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    className="anvil-shell__text-input anvil-shell__text-input--multi"
+                    value={textValue}
+                    onChange={(event) => setTextValue(event.target.value)}
+                    placeholder="Add callout text"
+                    rows={2}
+                  />
+                )}
               </div>
-            </div>
+            )}
+
           </aside>
 
           <div className="anvil-shell__canvas-wrap panel panel--forge">
@@ -694,20 +686,7 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
               style={{ display: "none" }}
             />
 
-            <div className="anvil-shell__canvas-toolbar">
-              <div>
-                <span className="anvil-shell__canvas-label">Draft Surface</span>
-                <p className="anvil-shell__canvas-copy">
-                  The frame scales to the available space so the board stays visible instead of spilling off-screen.
-                </p>
-              </div>
-              <div className="anvil-shell__canvas-badges">
-                <span className="anvil-shell__canvas-badge">Resolution Safe</span>
-                <span className="anvil-shell__canvas-badge">Callout Ready</span>
-                <span className="anvil-shell__canvas-badge">Exportable</span>
-              </div>
-            </div>
-
+            <div className="anvil-shell__canvas-status">{status}</div>
             <div className="anvil-shell__canvas-stage">
               <div className="anvil-shell__canvas-frame">
                 <canvas
@@ -726,5 +705,61 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── HelpBubble — small ? icon that opens a contextual tip ─── */
+function HelpBubble({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+
+  if (!text) return null;
+
+  return (
+    <span style={{ position: "relative", display: "inline-flex", alignItems: "center", marginLeft: 4 }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: 14, height: 14, borderRadius: "50%",
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: open ? "rgba(214,140,32,0.18)" : "rgba(255,255,255,0.04)",
+          color: open ? "var(--yellow-bright)" : "var(--text-muted)",
+          fontSize: 9, fontWeight: 800,
+          cursor: "pointer", lineHeight: 1,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 0, flexShrink: 0,
+          transition: "background 0.15s, color 0.15s",
+        }}
+        title="Help"
+      >
+        ?
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", left: 18, top: -6, zIndex: 20,
+          width: 210, padding: "10px 12px 10px 10px",
+          background: "linear-gradient(180deg, rgba(20,26,40,0.98), rgba(12,16,28,0.98))",
+          border: "1px solid rgba(214,140,32,0.28)",
+          borderRadius: "var(--radius-md)",
+          color: "var(--text-secondary)",
+          fontSize: 11, lineHeight: 1.6,
+          boxShadow: "0 10px 32px rgba(0,0,0,0.5)",
+          pointerEvents: "all",
+        }}>
+          {text}
+          <button
+            onClick={close}
+            style={{
+              position: "absolute", top: 6, right: 6,
+              background: "none", border: "none",
+              color: "var(--text-muted)", fontSize: 12,
+              cursor: "pointer", padding: 2, lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </span>
   );
 }

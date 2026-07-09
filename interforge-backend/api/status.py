@@ -51,14 +51,17 @@ def _check_gpu() -> dict:
 # ── Models ───────────────────────────────────────────────────
 
 _APPDATA = os.environ.get("APPDATA", str(Path.home()))
-_CKPT = "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
+_CKPT = "DreamShaperXL_v2_1.safetensors"
+_LEGACY_CKPT = "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
 
 _REQUIRED_MODELS: list[dict] = [
     {
-        "name": "Juggernaut XL v9 (SDXL checkpoint)",
+        "name": "DreamShaper XL v2.1 (SDXL checkpoint)",
         "env_key": "INTERFORGE_SDXL_CHECKPOINT",
         "default_paths": [
             f"{_APPDATA}/IterForge/models/checkpoints/{_CKPT}",
+            # Legacy fallback — pre-Phase 14 installs still have Juggernaut
+            f"{_APPDATA}/IterForge/models/checkpoints/{_LEGACY_CKPT}",
         ],
     },
 ]

@@ -31,35 +31,42 @@
   pointer-events: none;
 }
 
-/* Primary — forge yellow */
+/* Primary — full forge gradient (yellow → orange), brand moment */
 .btn--primary {
-  background: var(--yellow-core);
+  background: var(--forge-gradient);
   color: #000;
+  font-weight: 800;
+  border: none;
+  box-shadow: 0 2px 12px rgba(240, 184, 40, 0.22), 0 1px 0 rgba(255,255,255,0.12) inset;
 }
 .btn--primary:hover {
-  background: var(--yellow-bright);
-  box-shadow: var(--shadow-yellow);
+  filter: brightness(1.1);
+  box-shadow: var(--shadow-forge);
 }
 
-/* Lock — ember orange (the "lock in" action) */
+/* Lock — ember-forward gradient (orange dominant), commitment */
 .btn--lock {
-  background: var(--ember-core);
+  background: linear-gradient(135deg, var(--ember-bright), var(--ember-core));
   color: #fff;
+  font-weight: 800;
+  border: none;
+  box-shadow: 0 2px 12px rgba(232, 98, 26, 0.25);
 }
 .btn--lock:hover {
-  background: var(--ember-bright);
+  filter: brightness(1.1);
   box-shadow: var(--shadow-ember);
 }
 
-/* Secondary — steel surface */
+/* Secondary — steel surface, silver border */
 .btn--secondary {
   background: var(--steel-surface);
-  color: var(--text-primary);
+  color: var(--steel-shine);
   border: 1px solid var(--steel-edge);
 }
 .btn--secondary:hover {
   background: var(--bg-overlay);
-  border-color: var(--yellow-core);
+  border-color: rgba(240, 184, 40, 0.30);
+  color: var(--text-primary);
 }
 
 /* Ghost */
@@ -87,29 +94,29 @@
 }
 
 /* -- Panel / Card -------------------------------------------
-   The core UI building block. Yellow trim on the top edge
-   is what gives the forge aesthetic its character.
+   The core UI building block. Metallic silver border with
+   a yellow top trim — matching the logo's frame/rivet language.
    ------------------------------------------------------------ */
 .panel {
   background: var(--bg-raised);
-  border: 1px solid var(--bg-border);
+  border: 1px solid rgba(160, 175, 200, 0.10);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
 }
 
-/* Yellow-trim variant — used for main content panels */
+/* Forge-plate variant — yellow-top trim, steel border */
 .panel--forge {
   background: var(--bg-raised);
   border: 1px solid var(--steel-edge);
   border-top: 2px solid var(--yellow-core);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(240, 184, 40, 0.06);
 }
 
-/* Glowing variant — active/focused panel */
+/* Glowing variant — active/focused panel, forge glow */
 .panel--active {
-  border-color: var(--yellow-core);
-  box-shadow: var(--shadow-yellow);
+  border-color: rgba(240, 184, 40, 0.35);
+  box-shadow: 0 0 0 1px rgba(240, 184, 40, 0.12), var(--shadow-yellow);
 }
 
 /* -- Panel header ------------------------------------------- */
@@ -178,7 +185,7 @@
 }
 .input:focus {
   border-color: var(--yellow-core);
-  box-shadow: 0 0 0 3px rgba(200, 150, 10, 0.12);
+  box-shadow: 0 0 0 3px rgba(240, 184, 40, 0.12);
 }
 .input::placeholder { color: var(--text-muted); }
 
@@ -236,7 +243,7 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.badge--yellow  { background: rgba(200, 150, 10, 0.18); color: var(--yellow-bright); }
+.badge--yellow  { background: rgba(240, 184, 40, 0.18); color: var(--yellow-bright); }
 .badge--ember   { background: rgba(201, 79,  26, 0.18); color: var(--ember-bright); }
 .badge--success { background: rgba(46,  204, 113, 0.15); color: var(--status-success); }
 .badge--warn    { background: rgba(243, 156,  18, 0.15); color: var(--status-warn); }
@@ -270,8 +277,9 @@
 
 .progress-fill {
   height: 100%;
-  background: var(--yellow-core);
+  background: var(--forge-gradient-h);
   border-radius: var(--radius-full);
+  box-shadow: 0 0 8px rgba(240, 184, 40, 0.4);
   transition: width var(--transition-slow);
 }
 

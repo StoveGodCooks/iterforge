@@ -24,6 +24,12 @@
   gap: var(--space-6);
   padding: var(--space-8);
   animation: fade-in var(--transition-normal) forwards;
+  /* Forge fire ambient — warm light from the center, ember bleeds at edges */
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(240, 184, 40, 0.07) 0%, transparent 55%),
+    radial-gradient(ellipse at 20% 80%, rgba(232, 98, 26, 0.05) 0%, transparent 40%),
+    radial-gradient(ellipse at 80% 80%, rgba(232, 98, 26, 0.04) 0%, transparent 40%),
+    var(--bg-void);
 }
 
 .forge-picker__label {
@@ -76,22 +82,24 @@
   background: var(--bg-overlay);
 }
 
-/* Mesh card — yellow accent */
+/* Mesh card — yellow end of the gradient, creation */
 .pipeline-card--mesh {
   border-top-color: var(--yellow-core);
 }
 .pipeline-card--mesh:hover {
-  border-color: var(--yellow-core);
+  border-color: var(--yellow-bright);
   box-shadow: var(--shadow-yellow-strong);
+  background: linear-gradient(160deg, rgba(240,184,40,0.06) 0%, var(--bg-raised) 60%);
 }
 
-/* Sprite card — ember accent */
+/* Sprite card — orange end of the gradient, action */
 .pipeline-card--sprite {
   border-top-color: var(--ember-core);
 }
 .pipeline-card--sprite:hover {
-  border-color: var(--ember-core);
+  border-color: var(--ember-bright);
   box-shadow: var(--shadow-ember);
+  background: linear-gradient(160deg, rgba(232,98,26,0.06) 0%, var(--bg-raised) 60%);
 }
 
 .pipeline-card--anvil {
@@ -168,7 +176,7 @@
   transition: background var(--transition-fast), box-shadow var(--transition-fast);
 }
 .pipeline-card--mesh  .pipeline-card__cta {
-  background: var(--yellow-core);
+  background: var(--forge-gradient);
   color: #000;
 }
 .pipeline-card--mesh:hover .pipeline-card__cta {
@@ -183,7 +191,7 @@
 }
 .pipeline-card--anvil .pipeline-card__cta {
   background: #9ba7ba;
-  color: #081019;
+  color: #0E0C0A;
 }
 .pipeline-card--anvil:hover .pipeline-card__cta {
   background: #c7d0de;
@@ -263,7 +271,7 @@
 
 .mesh-step--active {
   border-color: var(--yellow-core);
-  background: rgba(200, 150, 10, 0.04);
+  background: rgba(240, 184, 40, 0.04);
 }
 
 .mesh-step--done {
@@ -330,7 +338,7 @@
   bottom: 0;
   width: 3px;
   background: var(--yellow-core);
-  box-shadow: 0 0 8px rgba(200, 150, 10, 0.5);
+  box-shadow: 0 0 8px rgba(240, 184, 40, 0.5);
 }
 
 /* ── Right viewport ──────────────────────────────────────── */
@@ -375,15 +383,12 @@
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 30% 40%, rgba(200, 150, 10, 0.04) 0%, transparent 60%),
-    repeating-linear-gradient(
-      0deg, transparent, transparent 39px,
-      rgba(255,255,255,0.02) 40px
-    ),
-    repeating-linear-gradient(
-      90deg, transparent, transparent 39px,
-      rgba(255,255,255,0.02) 40px
-    ),
+    /* Forge-fire ambient — warm crown + ember floor */
+    radial-gradient(ellipse at 50% 0%,   rgba(240, 184, 40, 0.07) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 100%, rgba(232, 98,  26, 0.05) 0%, transparent 45%),
+    /* Subtle grid lines */
+    repeating-linear-gradient(0deg,  transparent, transparent 39px, rgba(255,255,255,0.018) 40px),
+    repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.018) 40px),
     var(--bg-void);
 }
 

@@ -2,7 +2,7 @@
 Asset type configuration — SDXL edition.
 
 Switched from SD1.5 (512px) to SDXL (1024px) to match the installed
-Juggernaut-XL checkpoint. Batch sizes reduced to 2 to stay within 8 GB VRAM.
+DreamShaper XL checkpoint. Batch sizes reduced to 2 to stay within 8 GB VRAM.
 
 SDXL resolution guide (multiples of 64, ~1M total pixels):
   Square    1024 × 1024  (1:1)
@@ -20,7 +20,7 @@ class AssetConfig:
     sampler: str = "euler_ancestral"
     scheduler: str = "karras"
     cfg: float = 6.5          # SDXL is more prompt-sensitive; 6-7 is sweet spot
-    steps: int = 30           # 30 steps — Juggernaut XL sharpens significantly vs 25
+    steps: int = 30           # 30 steps — DreamShaper XL sharpens significantly vs 25
 
     # Resolution — SDXL native
     width: int = 1024
@@ -34,6 +34,18 @@ class AssetConfig:
     batch_size: int = 2
     prompt_keywords: list[str] = field(default_factory=list)
 
+    # Smelt-time IP-Adapter identity weight.
+    # 0.80 — character/creature: identity must survive pose change.
+    # 0.55 — armor/clothing: silhouette anchor + material fidelity.
+    # 0.45 — weapon: shape dominant, don't drag scene context in.
+    # 0.35 — small props: text prompt carries most of the description.
+    # 0.00 — environment/texture/etc: IP-Adapter disabled.
+    ip_adapter_scale: float = 0.55
+
+    # Smelt-time CFG override. Lower = reference has more pull. None = use
+    # the stage's default (turnaround = 6.0, per-direction = 7.5).
+    smelt_cfg: float | None = None
+
 
 ASSET_CONFIGS: dict[str, AssetConfig] = {
 
@@ -45,6 +57,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1024, height=1024,
         reconstruction="ORGANIC",
         batch_size=2,
+        ip_adapter_scale=0.35,
+        smelt_cfg=8.0,
         prompt_keywords=["single game prop", "one object", "3d asset", "centered", "isolated on pure white background", "highly detailed", "masterpiece", "professional game art"],
     ),
 
@@ -56,6 +70,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=832, height=1216,     # portrait — weapons are tall
         reconstruction="HARD_SURFACE",
         batch_size=2,
+        ip_adapter_scale=0.45,
+        smelt_cfg=7.5,
         prompt_keywords=["single fantasy weapon", "one weapon only", "game weapon", "centered", "isolated on pure white background", "highly detailed", "sharp metalwork", "masterpiece", "professional game art"],
     ),
 
@@ -67,6 +83,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=832, height=1216,
         reconstruction="HARD_SURFACE",
         batch_size=2,
+        ip_adapter_scale=0.55,
+        smelt_cfg=7.0,
         prompt_keywords=["single armor set", "one armor", "game armor", "centered", "isolated on pure white background", "full armor"],
     ),
 
@@ -75,9 +93,11 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         scheduler="karras",
         cfg=7.5,
         steps=32,
-        width=832, height=1216,
+        width=1024, height=1024,     # square — SF3D crops to a square frame anyway
         reconstruction="ORGANIC",
         batch_size=2,
+        ip_adapter_scale=0.80,
+        smelt_cfg=6.0,
         prompt_keywords=["single character design", "one character", "full body", "game character", "centered", "isolated on pure white background", "highly detailed", "sharp focus", "professional character art"],
     ),
 
@@ -89,6 +109,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1024, height=1024,
         reconstruction="ORGANIC",
         batch_size=2,
+        ip_adapter_scale=0.80,
+        smelt_cfg=6.0,
         prompt_keywords=["single fantasy creature", "one creature", "game monster", "centered", "isolated on pure white background"],
     ),
 
@@ -100,6 +122,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1216, height=832,     # landscape — vehicles are wide
         reconstruction="HARD_SURFACE",
         batch_size=2,
+        ip_adapter_scale=0.40,
+        smelt_cfg=7.5,
         prompt_keywords=["single game vehicle", "one vehicle", "side view", "centered", "isolated on pure white background"],
     ),
 
@@ -111,6 +135,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=832, height=1216,
         reconstruction="HARD_SURFACE",
         batch_size=2,
+        ip_adapter_scale=0.45,
+        smelt_cfg=7.5,
         prompt_keywords=["single game building", "one building", "architectural", "centered", "isolated on pure white background"],
     ),
 
@@ -122,6 +148,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1024, height=1024,
         reconstruction="HARD_SURFACE",
         batch_size=2,
+        ip_adapter_scale=0.40,
+        smelt_cfg=7.5,
         prompt_keywords=["single dungeon tile", "one tile", "top-down", "modular", "game tile", "centered", "isolated on pure white background"],
     ),
 
@@ -133,6 +161,7 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1216, height=832,
         reconstruction="NONE",
         batch_size=2,
+        ip_adapter_scale=0.0,
         prompt_keywords=["environment concept art", "game environment", "wide shot"],
     ),
 
@@ -144,6 +173,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1024, height=1024,
         reconstruction="ORGANIC",
         batch_size=2,
+        ip_adapter_scale=0.45,
+        smelt_cfg=7.0,
         prompt_keywords=["single game foliage", "one plant", "plant asset", "centered", "isolated on pure white background", "vegetation"],
     ),
 
@@ -155,6 +186,7 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1024, height=1024,
         reconstruction="NONE",
         batch_size=2,
+        ip_adapter_scale=0.0,
         prompt_keywords=["seamless texture", "tileable", "game texture", "PBR material"],
     ),
 
@@ -166,6 +198,7 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1024, height=512,     # panoramic aspect
         reconstruction="NONE",
         batch_size=1,
+        ip_adapter_scale=0.0,
         prompt_keywords=["skybox", "panoramic sky", "360 sky", "game background"],
     ),
 
@@ -178,6 +211,7 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         reconstruction="NONE",
         skip_smelting=True,
         batch_size=2,
+        ip_adapter_scale=0.0,
         prompt_keywords=["vfx element", "particle effect", "transparent background", "game effect"],
     ),
 
@@ -189,6 +223,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1024, height=1024,
         reconstruction="NONE",
         batch_size=4,           # icons are fast enough for batch 4
+        ip_adapter_scale=0.30,
+        smelt_cfg=8.0,
         prompt_keywords=["game ui icon", "item icon", "clean icon", "white background"],
     ),
 
@@ -200,6 +236,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1024, height=1024,
         reconstruction="NONE",
         batch_size=2,
+        ip_adapter_scale=0.30,
+        smelt_cfg=8.0,
         prompt_keywords=["logo design", "vector style", "clean", "white background"],
     ),
 
@@ -211,6 +249,7 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         width=1216, height=832,
         reconstruction="NONE",
         batch_size=2,
+        ip_adapter_scale=0.0,
         prompt_keywords=["concept art", "game concept", "detailed illustration"],
     ),
 
@@ -223,6 +262,8 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
         reconstruction="NONE",
         skip_smelting=True,
         batch_size=2,
+        ip_adapter_scale=0.55,
+        smelt_cfg=7.0,
         prompt_keywords=["sprite", "game sprite", "transparent background", "2d game art"],
     ),
 }

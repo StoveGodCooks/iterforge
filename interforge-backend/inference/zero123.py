@@ -127,8 +127,11 @@ class Zero123Engine:
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if self._device == "cuda" else torch.float32
 
-        # Try local cache first, fall back to HuggingFace download
-        model_path = str(_MODEL_DIR) if _MODEL_DIR.exists() else _HF_MODEL_ID
+        # A complete Zero123++ save emits model_index.json at the root.
+        # If that file is missing, the _MODEL_DIR is from a partial save
+        # and an offline load would hang or throw opaquely — skip it.
+        local_ready = (_MODEL_DIR / "model_index.json").exists()
+        model_path = str(_MODEL_DIR) if local_ready else _HF_MODEL_ID
 
         log.info(f"[zero123] Loading Zero123++ from {model_path} on {self._device}…")
 
@@ -143,10 +146,13 @@ class Zero123Engine:
                 torch_dtype=dtype,
                 custom_pipeline=_HF_PIPELINE_ID,
                 trust_remote_code=True,
-                local_files_only=True,
+                local_files_only=local_ready,
             )
-        except Exception:
-            log.info("[zero123] Local cache miss — downloading from HuggingFace (first run only)…")
+        except Exception as offline_exc:
+            log.info(
+                f"[zero123] Local cache miss ({type(offline_exc).__name__}) — "
+                f"downloading from HuggingFace (first run only)…"
+            )
             self._pipe = DiffusionPipeline.from_pretrained(
                 _HF_MODEL_ID,
                 torch_dtype=dtype,
@@ -256,8 +262,8 @@ class Zero123Engine:
     def generate_views(
         self,
         reference_image: Image.Image,
-        num_inference_steps: int = 75,
-        guidance_scale: float = 4.0,
+        num_inference_steps: int = 28,
+        guidance_scale: float = 3.0,
     ) -> dict[str, Image.Image]:
         """
         Generate 6 consistent views from a single reference image.
@@ -265,10 +271,15 @@ class Zero123Engine:
         Returns dict mapping view name → PIL Image:
           "front", "front_right", "right", "back", "left", "front_left"
 
-        num_inference_steps: Upstream pipeline defaults to 28. Higher values
-            produce cleaner details at the cost of inference time. 75 steps
-            is the recommended value from the Zero123++ gradio_app.py demo.
-            Performance: ~45s at 28 steps, ~90s at 75 steps on RTX 3070.
+        num_inference_steps: Upstream pipeline defaults to 28. The gradio
+            demo uses 75 but that over-renders faces into "Janice" artifacts.
+            50 steps balances detail vs face distortion.
+            Performance: ~45s at 28 steps, ~60s at 50, ~90s at 75 on RTX 3070.
+
+        guidance_scale: Controls how strongly the model follows its prior.
+            4.0 (old default) causes face distortion on humanoid characters.
+            3.0 reduces face warping while keeping view consistency.
+            Below 2.5 → views start drifting apart geometrically.
         """
         if self._pipe is None:
             self.load()

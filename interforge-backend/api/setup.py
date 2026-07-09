@@ -89,12 +89,31 @@ def _models_dir(sub: str) -> str:
 
 REQUIRED_MODELS = [
     {
-        "id":       "juggernaut_xl",
-        "name":     "Juggernaut XL v9 (SDXL checkpoint)",
-        "filename": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors",
+        # Primary checkpoint — versatile across characters, environments,
+        # props, and stylized renders. Used by Prospect (txt2img) and
+        # Smelt 2D (IP-Adapter direction generation).
+        "id":       "dreamshaper_xl",
+        "name":     "DreamShaper XL v2.1 (SDXL checkpoint)",
+        "filename": "DreamShaperXL_v2_1.safetensors",
         "dest_dir": _models_dir("checkpoints"),
-        "url":      "https://huggingface.co/RunDiffusion/Juggernaut-XL-v9/resolve/main/Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors",
+        "url":      "https://huggingface.co/Lykon/dreamshaper-xl-v2-turbo/resolve/main/DreamShaperXL_Turbo_v2.safetensors",
         "size_mb":  6800,
+    },
+    {
+        # Pose-guided sprite-sheet generation (ControlNet + IP-Adapter).
+        # Multi-file HF repo rather than a single safetensors — the setup
+        # worker calls huggingface_hub.snapshot_download when "hf_repo" is set.
+        "id":       "controlnet_openpose_sdxl",
+        "name":     "ControlNet OpenPose SDXL",
+        "filename": "config.json",                  # sentinel file used for presence check
+        "dest_dir": _models_dir("controlnet/openpose-sdxl"),
+        "hf_repo":  "thibaud/controlnet-openpose-sdxl-1.0",
+        "hf_allow_patterns": [
+            "config.json",
+            "diffusion_pytorch_model.safetensors",
+        ],
+        "url":      "https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0",
+        "size_mb":  2500,
     },
 ]
 
@@ -105,10 +124,42 @@ def _find_model_on_disk(filename: str, primary_dir: str) -> Path | None:
     return p if p.exists() else None
 
 
+def _find_in_hf_cache(hf_repo: str, filename: str) -> Path | None:
+    """
+    Check the HuggingFace hub cache for a required file.
+
+    HF hub stores snapshots under HF_HOME (or ~/.cache/huggingface/hub) as
+    `models--{org}--{name}/snapshots/{revision}/{file}`.  If the pipeline
+    auto-downloaded the repo on first use (e.g. ControlNet via diffusers),
+    the file exists there even though our own MODELS_ROOT directory is
+    empty — so setup status should report it as present.
+    """
+    hf_home = os.environ.get("HF_HOME") or os.environ.get("HUGGINGFACE_HUB_CACHE")
+    candidates = []
+    if hf_home:
+        candidates.append(Path(hf_home) / "hub")
+    candidates.append(Path.home() / ".cache" / "huggingface" / "hub")
+
+    folder_name = "models--" + hf_repo.replace("/", "--")
+    for base in candidates:
+        repo_dir = base / folder_name / "snapshots"
+        if not repo_dir.exists():
+            continue
+        for snap in repo_dir.iterdir():
+            candidate = snap / filename
+            if candidate.exists():
+                return candidate
+    return None
+
+
 def _check_models() -> list[dict]:
     results = []
     for m in REQUIRED_MODELS:
         found = _find_model_on_disk(m["filename"], m["dest_dir"])
+        # Fall back to the HF hub cache — diffusers may have populated it
+        # on first use without hitting our MODELS_ROOT path.
+        if found is None and m.get("hf_repo"):
+            found = _find_in_hf_cache(m["hf_repo"], m["filename"])
         results.append({
             "id":       m["id"],
             "name":     m["name"],

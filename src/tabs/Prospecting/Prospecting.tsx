@@ -113,9 +113,10 @@ const MOCK_LORAS: LoRA[] = [
 export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
   /* Prompt */
   const [prompt,    setPrompt]    = useState("");
-  const [negPrompt, setNegPrompt] = useState(
-    "blurry, low quality, watermark, text, signature, deformed, ugly, bad anatomy"
-  );
+  // Empty by default — the backend auto-applies the full system negative
+  // prompt (shadow / multi-object / quality guardrails from MasterForge).
+  // This field is for *extra* user-specific negatives only.
+  const [negPrompt, setNegPrompt] = useState("");
 
   /* Selections */
   const [assetType,  setAssetType]  = useState<string | null>(null);
@@ -166,7 +167,6 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
   const [svgData,      setSvgData]      = useState<string | null>(null);
   const [svgAnalyzing, setSvgAnalyzing] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("results");
-  const [anvilOpen, setAnvilOpen] = useState(false);
 
   /* Collapsible state */
   const [open, setOpen] = useState<Record<string, boolean>>({
@@ -496,10 +496,10 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
               <span className="prompt-box__count">{prompt.length}</span>
             </div>
             <div className="prompt-box__negative">
-              <span className="prompt-box__tag prompt-box__tag--neg">Negative</span>
+              <span className="prompt-box__tag prompt-box__tag--neg">Negative (extras)</span>
               <textarea
                 className="prompt-box__textarea prompt-box__textarea--neg"
-                placeholder="What to avoid…"
+                placeholder="System guardrails (shadows, multi-object, quality) are applied automatically. Add extra exclusions here…"
                 value={negPrompt}
                 onChange={e => setNegPrompt(e.target.value)}
                 rows={3}
@@ -737,9 +737,11 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
             {generating ? (
               <>
                 <span className="spinner" style={{ borderTopColor: "#000" }} />
-                {genStep > 0 && genTotal > 0 && genPct < 100
-                  ? `Step ${genStep}/${genTotal}`
-                  : genStatus || "Processing…"}
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                  {genStep > 0 && genTotal > 0 && genPct < 100
+                    ? `Step ${genStep}/${genTotal}`
+                    : genStatus || "Processing…"}
+                </span>
               </>
             ) : <>✦ Generate</>}
           </button>
@@ -766,7 +768,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
               ? "Anvil workspace active"
               : images.length > 0
                 ? `${images.length} image${images.length !== 1 ? "s" : ""} generated`
-                : "Forge ready"}
+                : ""}
           </span>
           <div className="pros__canvas-toolbar-actions">
             <div className="pros__workspace-toggle" role="tablist" aria-label="Prospecting workspace mode">
@@ -778,14 +780,14 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
               </button>
               <button
                 className={`pros__workspace-toggle-btn ${workspaceMode === "anvil" ? "pros__workspace-toggle-btn--active" : ""}`}
-                onClick={() => { setWorkspaceMode("anvil"); setAnvilOpen(false); }}
+                onClick={() => setWorkspaceMode("anvil")}
               >
                 Anvil
               </button>
             </div>
             {images.length > 0 && (
               <button className="btn btn--ghost" style={{ fontSize: "var(--text-xs)", height: 28 }}
-                onClick={() => { setImages([]); setSelected(null); setWorkspaceMode("anvil"); setAnvilOpen(false); }}>
+                onClick={() => { setImages([]); setSelected(null); setWorkspaceMode("anvil"); }}>
                 Clear
               </button>
             )}
@@ -853,84 +855,65 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
         )}
 
         {workspaceMode === "anvil" ? (
-          anvilOpen ? (
-            <div className="pros__anvil-stage">
-              <AnvilWorkspace embedded onClose={() => setAnvilOpen(false)} />
-            </div>
-          ) : (
-            <div className="pros__anvil-launcher">
-              <div className="pros__anvil-launcher-hero">
-                <div className="pros__anvil-launcher-copy">
-                  <span className="pros__anvil-launcher-kicker">Prospecting Helper Deck</span>
-                  <h3 className="pros__anvil-launcher-title">Shape the board before you commit to generation.</h3>
-                  <p className="pros__anvil-launcher-body">
-                    Anvil is the sketch-and-callout surface for silhouettes, notes, paintovers, and quick layout decisions.
-                    Keep the visual intent visible before you burn cycles on a run.
-                  </p>
-                </div>
-                <div className="pros__anvil-launcher-actions">
-                  <button className="pros__anvil-open-btn" onClick={() => setAnvilOpen(true)}>
-                    Open Anvil Workspace
-                  </button>
-                  <span className="pros__anvil-launcher-meta">Responsive canvas fit, export, and reference import included.</span>
-                </div>
-              </div>
-
-              <div className="pros__anvil-helper-grid">
-                <button className="pros__anvil-helper-card" onClick={() => setAnvilOpen(true)}>
-                  <span className="pros__anvil-helper-kicker">Live</span>
-                  <strong>Anvil Board</strong>
-                  <p>Launch the full drafting pad with sketch, shape, note, sticker, and export tools.</p>
-                </button>
-                <button className="pros__anvil-helper-card pros__anvil-helper-card--stale" disabled>
-                  <span className="pros__anvil-helper-kicker">Static Helper</span>
-                  <strong>Silhouette Starters</strong>
-                  <p>Saved starter poses and rough templates will live here in a stale helper state.</p>
-                </button>
-                <button className="pros__anvil-helper-card pros__anvil-helper-card--stale" disabled>
-                  <span className="pros__anvil-helper-kicker">Static Helper</span>
-                  <strong>Layout Guides</strong>
-                  <p>Perspective rails, center lines, and framing guides can sit here without taking over the canvas.</p>
-                </button>
-                <button className="pros__anvil-helper-card pros__anvil-helper-card--stale" disabled>
-                  <span className="pros__anvil-helper-kicker">Static Helper</span>
-                  <strong>Note Packs</strong>
-                  <p>Quick callout strips, material tags, and reminder chips can idle here until they are wired up.</p>
-                </button>
-              </div>
-
-              <div className="pros__anvil-stale-actions">
-                <button className="pros__anvil-stale-btn" disabled>Sticker Shelf</button>
-                <button className="pros__anvil-stale-btn" disabled>Pose Cards</button>
-                <button className="pros__anvil-stale-btn" disabled>Palette Pins</button>
-                <button className="pros__anvil-stale-btn" disabled>Shot Notes</button>
-              </div>
-            </div>
-          )
+          <div className="pros__anvil-stage">
+            <AnvilWorkspace embedded />
+          </div>
         ) : images.length === 0 && !genError ? (
-          <button className="pros__empty pros__empty--interactive" onClick={() => { setWorkspaceMode("anvil"); setAnvilOpen(false); }}>
-            <span className="pros__empty-icon">⚒</span>
-            <span>Light the forge — describe your asset and strike Generate</span>
-            <span className="pros__empty-kicker">Prospecting Workspace</span>
-            <span className="pros__empty-title">Open The Anvil Launcher In This Canvas</span>
-            <span className="pros__empty-copy">
-              Start with helper cards, then open the full board for silhouettes, notes, paintovers, and reference markup.
-            </span>
-            <span className="pros__empty-feature-row">
-              <span className="pros__empty-feature">Pen + Brush</span>
-              <span className="pros__empty-feature">Filled Shapes</span>
-              <span className="pros__empty-feature">Text Boxes</span>
-              <span className="pros__empty-feature">Sticker Stamps</span>
-            </span>
-            <span className="pros__empty-cta">Open Anvil Launcher -&gt;</span>
-          </button>
+          /* ── Forge-vibe empty state ── */
+          <div className="pros__forge-empty">
+            <div style={{ position: "relative", marginBottom: 24 }}>
+              {/* Glow bloom */}
+              <div style={{
+                position: "absolute", inset: "-48px",
+                background: "radial-gradient(circle, rgba(214,140,32,0.22) 0%, transparent 65%)",
+                filter: "blur(16px)",
+                pointerEvents: "none",
+              }} />
+              {/* Crossed hammers — yellow, glowing */}
+              <span style={{
+                fontSize: 72,
+                lineHeight: 1,
+                display: "block",
+                position: "relative",
+                filter: "drop-shadow(0 0 16px rgba(214,140,32,0.7)) drop-shadow(0 0 4px rgba(201,79,26,0.5))",
+                color: "var(--yellow-bright)",
+              }}>
+                ⚒
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: "var(--text-md)", color: "var(--text-primary)", fontWeight: 600, letterSpacing: "0.01em" }}>
+              Describe your asset — strike Generate.
+            </p>
+            <p style={{ margin: "6px 0 0", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+              Or sketch your concept first.
+            </p>
+            <button
+              style={{
+                marginTop: 20, padding: "8px 18px",
+                border: "1px solid rgba(214,140,32,0.25)",
+                borderRadius: "var(--radius-full)",
+                background: "rgba(214,140,32,0.07)",
+                color: "var(--yellow-bright)",
+                fontSize: "var(--text-xs)", fontWeight: 700,
+                letterSpacing: "0.06em", textTransform: "uppercase",
+                cursor: "pointer",
+                transition: "background var(--transition-fast), border-color var(--transition-fast)",
+              }}
+              onClick={() => setWorkspaceMode("anvil")}
+            >
+              Open Anvil →
+            </button>
+          </div>
         ) : images.length === 0 ? null : (
           <div className="pros__gallery">
             {images.map((src, i) => (
               <div key={i}
                 className={`img-card ${selected === i ? "img-card--selected" : ""}`}
                 onClick={() => setSelected(i)}>
-                <img src={src} alt={`Generated ${i + 1}`} />
+                {/* Prefer the rembg'd cutout once it arrives — that's what
+                    the mesh pipeline actually consumes. Falls back
+                    to the raw render while rembg is still running. */}
+                <img src={imageMeta[i]?.rgbaUrl || src} alt={`Generated ${i + 1}`} />
 
                 {/* SVG contour overlay — only on selected image when on */}
                 {selected === i && svgOn && svgData && (
@@ -988,8 +971,8 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
               </>
             )}
             {workspaceMode === "anvil" && (
-              <button className="pros__jump-btn" onClick={() => anvilOpen ? setAnvilOpen(false) : setWorkspaceMode("results")}>
-                {anvilOpen ? "Back To Launcher" : "View Results"}
+              <button className="pros__jump-btn" onClick={() => setWorkspaceMode("results")}>
+                View Results
               </button>
             )}
             <button className="pros__lock-btn" onClick={handleLock} disabled={workspaceMode !== "results" || selected === null}>

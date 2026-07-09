@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import "../../styles/smelting.css";
-import type { SmeltingOutput, ViewAngle, ProspectingOutput } from "../../types/pipeline";
+import { ENABLE_3D } from "../../featureFlags";
+import type {
+  SmeltingOutput, SmeltMode, ViewAngle, ProspectingOutput,
+  PosePreset, PoseLibraryResponse,
+} from "../../types/pipeline";
 
 const BACKEND = "http://127.0.0.1:7842";
 
@@ -18,7 +22,7 @@ interface Props {
   onLock: (data: SmeltingOutput) => void;
 }
 
-/* ── View definitions (matches Zero123++ 3×2 grid output) ── */
+/* ── 3D views (Zero123++ 3×2 grid) ─────────────────────────── */
 const VIEWS: { angle: ViewAngle; label: string; icon: string; hint: string }[] = [
   { angle: "front",       label: "Front",       icon: "⬆",  hint: "0°"   },
   { angle: "front_right", label: "Front Right",  icon: "↗",  hint: "60°"  },
@@ -40,11 +44,46 @@ export default function Smelting({ prospectingData, onLock }: Props) {
   const sourceImage  = prospectingData?.rgbaPath ?? prospectingData?.imagePath ?? null;
   const sourcePrompt = prospectingData?.prompt ?? "";
 
-  /* Per-view state */
+  /* 3D / SPRITE mode toggle — defaults to SPRITE (2D sprite sheet) */
+  const [smeltMode, setSmeltMode] = useState<SmeltMode>("SPRITE");
+
+  /* SPRITE (one-shot tiled) is prompt-driven — NO prospect required. Prefill
+     the prompt from a locked prospect if the user came from Prospecting,
+     otherwise start blank and let them type a character description here. */
+  const [prompt, setPrompt]       = useState<string>(sourcePrompt);
+  const [assetType, setAssetType] = useState<string>(prospectingData?.assetType ?? "character");
+
+  /* 3D multi-view set; SPRITE uses posePresets + selectedPoses instead */
+  const activeViews = VIEWS;
+
+  /* Per-view state (keyed by ViewAngle for 2D/3D modes) */
   const [views, setViews] = useState<Record<ViewAngle, ViewState>>(EMPTY_VIEWS);
 
-  /* Single job ID for the batch (all 6 views come from one Zero123++ pass) */
+  /* Sprite-sheet state — pose presets come from /api/poses */
+  const [posePresets, setPosePresets]       = useState<PosePreset[]>([]);
+  const [selectedPoses, setSelectedPoses]   = useState<string[]>([]);
+  const [poseViews, setPoseViews]           = useState<Record<string, ViewState>>({});
+
+  /* Fetch pose library once */
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${BACKEND}/api/poses`)
+      .then(r => r.ok ? r.json() as Promise<PoseLibraryResponse> : Promise.reject(r.status))
+      .then(data => {
+        if (cancelled) return;
+        setPosePresets(data.presets);
+        setSelectedPoses(data.default_sheet);
+      })
+      .catch(() => {/* backend might not be up yet — UI still renders */});
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Single job ID for the batch */
   const [smeltJobId, setSmeltJobId] = useState<string | null>(null);
+
+  /* Live progress line from heartbeat PROGRESS events (so a long one-shot
+     generation shows elapsed time instead of a frozen-looking spinner). */
+  const [genProgress, setGenProgress] = useState<string | null>(null);
 
   /* Which view is in the detail lightbox */
   const [lightbox, setLightbox] = useState<ViewAngle | null>(null);
@@ -62,37 +101,84 @@ export default function Smelting({ prospectingData, onLock }: Props) {
     setViews(prev => ({ ...prev, [angle]: { ...prev[angle], ...update } }));
   }
 
-  /* ── Generate all 6 views (single Zero123++ pass) ──────── */
-  async function generateAll() {
-    if (!prospectingData?.prospectJobId) return;
+  function setPoseViewState(name: string, update: Partial<ViewState>) {
+    setPoseViews(prev => ({
+      ...prev,
+      [name]: { ...(prev[name] ?? { status: "idle", imageSrc: null, rgbaUrl: null, error: null }), ...update },
+    }));
+  }
 
-    // Mark all views as generating
-    setViews(
-      Object.fromEntries(
-        VIEWS.map(v => [v.angle, { status: "generating" as const, imageSrc: null, rgbaUrl: null, error: null }])
-      ) as Record<ViewAngle, ViewState>
+  function togglePose(name: string) {
+    setSelectedPoses(prev =>
+      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
     );
+  }
+
+  /* ── Generate views / directions / sprite poses ────────── */
+  async function generateAll() {
+    const isSprite = smeltMode === "SPRITE";
+    if (isSprite) {
+      // Tiled sprite sheet: needs a prompt + at least one pose, no prospect.
+      if (!prompt.trim() || selectedPoses.length === 0) return;
+    } else {
+      // 3D multi-view still needs a locked prospect reference.
+      if (!prospectingData?.prospectJobId) return;
+    }
+
+    // Mark active slots as generating
+    if (isSprite) {
+      setPoseViews(() => {
+        const next: Record<string, ViewState> = {};
+        for (const name of selectedPoses) {
+          next[name] = { status: "generating", imageSrc: null, rgbaUrl: null, error: null };
+        }
+        return next;
+      });
+    } else {
+      setViews(prev => {
+        const next = { ...prev };
+        for (const v of activeViews) {
+          next[v.angle] = { status: "generating", imageSrc: null, rgbaUrl: null, error: null };
+        }
+        return next;
+      });
+    }
+
+    setGenProgress("Starting…");
 
     // Close any previous SSE
     sseRef.current?.close();
 
     try {
+      const body: Record<string, unknown> = {
+        prompt:          isSprite ? prompt : sourcePrompt,
+        asset_type:      isSprite ? assetType : (prospectingData?.assetType ?? "prop"),
+        art_style:       prospectingData?.artStyle ?? "stylized",
+        mode:            smeltMode,
+        gen_resolution:  512,
+      };
+      if (isSprite) {
+        // Prompt-driven tiled sheet — no prospect reference.
+        body.poses = selectedPoses;
+      } else {
+        body.prospect_job_id = prospectingData!.prospectJobId;
+        body.image_index     = prospectingData?.lockedImageIndex ?? 0;
+      }
+
       const res = await fetch(`${BACKEND}/api/smelt/all-views`, {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prospect_job_id: prospectingData.prospectJobId,
-          image_index:     prospectingData.lockedImageIndex ?? 0,
-          prompt:          sourcePrompt,
-          asset_type:      prospectingData.assetType  ?? "prop",
-          art_style:       prospectingData.artStyle   ?? "stylized",
-        }),
+        body:    JSON.stringify(body),
       });
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({})) as Record<string, unknown>;
         const msg = (errData.detail as string) ?? `Server error ${res.status}`;
-        VIEWS.forEach(v => setViewState(v.angle, { status: "error", error: msg }));
+        if (isSprite) {
+          selectedPoses.forEach(n => setPoseViewState(n, { status: "error", error: msg }));
+        } else {
+          VIEWS.forEach(v => setViewState(v.angle, { status: "error", error: msg }));
+        }
         return;
       }
 
@@ -106,28 +192,48 @@ export default function Smelting({ prospectingData, onLock }: Props) {
         const event = JSON.parse(e.data) as Record<string, unknown>;
         const type  = event.type as string;
 
-        if (type === "view_ready") {
-          const angle = event.view_angle as ViewAngle;
-          setViewState(angle, {
+        if (type === "progress") {
+          if (typeof event.message === "string") setGenProgress(event.message);
+        } else if (type === "view_ready") {
+          const key = event.view_angle as string;
+          const update: Partial<ViewState> = {
             status:   "done",
             imageSrc: event.image_url as string,
             rgbaUrl:  (event.rgba_url as string | null) ?? null,
             error:    null,
-          });
+          };
+          if (isSprite) {
+            setPoseViewState(key, update);
+          } else {
+            setViewState(key as ViewAngle, update);
+          }
         } else if (type === "done") {
+          setGenProgress(null);
           sse.close();
           sseRef.current = null;
         } else if (type === "error") {
-          // Mark any still-generating views as error
-          setViews(prev => {
-            const next = { ...prev };
-            for (const v of VIEWS) {
-              if (next[v.angle].status === "generating") {
-                next[v.angle] = { ...next[v.angle], status: "error", error: (event.message as string) ?? "Unknown error" };
+          const msg = (event.message as string) ?? "Unknown error";
+          if (isSprite) {
+            setPoseViews(prev => {
+              const next = { ...prev };
+              for (const n of selectedPoses) {
+                if (next[n]?.status === "generating") {
+                  next[n] = { ...next[n], status: "error", error: msg };
+                }
               }
-            }
-            return next;
-          });
+              return next;
+            });
+          } else {
+            setViews(prev => {
+              const next = { ...prev };
+              for (const v of VIEWS) {
+                if (next[v.angle].status === "generating") {
+                  next[v.angle] = { ...next[v.angle], status: "error", error: msg };
+                }
+              }
+              return next;
+            });
+          }
           sse.close();
           sseRef.current = null;
         }
@@ -136,19 +242,36 @@ export default function Smelting({ prospectingData, onLock }: Props) {
       sse.onerror = () => {
         sse.close();
         sseRef.current = null;
-        setViews(prev => {
-          const next = { ...prev };
-          for (const v of VIEWS) {
-            if (next[v.angle].status === "generating") {
-              next[v.angle] = { ...next[v.angle], status: "error", error: "Lost connection to backend." };
+        const msg = "Lost connection to backend.";
+        if (isSprite) {
+          setPoseViews(prev => {
+            const next = { ...prev };
+            for (const n of selectedPoses) {
+              if (next[n]?.status === "generating") {
+                next[n] = { ...next[n], status: "error", error: msg };
+              }
             }
-          }
-          return next;
-        });
+            return next;
+          });
+        } else {
+          setViews(prev => {
+            const next = { ...prev };
+            for (const v of activeViews) {
+              if (next[v.angle].status === "generating") {
+                next[v.angle] = { ...next[v.angle], status: "error", error: msg };
+              }
+            }
+            return next;
+          });
+        }
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unexpected error";
-      VIEWS.forEach(v => setViewState(v.angle, { status: "error", error: msg }));
+      if (isSprite) {
+        selectedPoses.forEach(n => setPoseViewState(n, { status: "error", error: msg }));
+      } else {
+        activeViews.forEach(v => setViewState(v.angle, { status: "error", error: msg }));
+      }
     }
   }
 
@@ -159,36 +282,52 @@ export default function Smelting({ prospectingData, onLock }: Props) {
   function reject(angle: ViewAngle) {
     setViewState(angle, { status: "rejected" });
   }
+  function approvePose(name: string) { setPoseViewState(name, { status: "approved" }); }
+  function rejectPose(name: string)  { setPoseViewState(name, { status: "rejected" }); }
 
   /* ── Lock logic ────────────────────────────────────────── */
-  const approvedCount = VIEWS.filter(v => views[v.angle].status === "approved").length;
-  const allApproved   = approvedCount === VIEWS.length;
-  const anyGenerating = VIEWS.some(v => views[v.angle].status === "generating");
+  const isSprite      = smeltMode === "SPRITE";
+  const spriteSlots   = selectedPoses;
+  const spriteApproved = spriteSlots.filter(n => poseViews[n]?.status === "approved").length;
+  const spriteGenerating = spriteSlots.some(n => poseViews[n]?.status === "generating");
 
-  /* 2D-only asset types that shouldn't enter the 3D pipeline */
-  const ASSET_2D_ONLY = ["concept", "environment", "tileset", "vfx", "ui"];
-  const is2DOnly = ASSET_2D_ONLY.includes(prospectingData?.assetType ?? "");
+  const approvedCount = isSprite
+    ? spriteApproved
+    : activeViews.filter(v => views[v.angle].status === "approved").length;
+  const totalCount = isSprite ? spriteSlots.length : activeViews.length;
+  const allApproved = totalCount > 0 && approvedCount === totalCount;
+  const anyGenerating = isSprite
+    ? spriteGenerating
+    : activeViews.some(v => views[v.angle].status === "generating");
 
-  /* canGenerate: backend needs a real prospect job ID to resolve source paths */
-  const canGenerate = !!prospectingData?.prospectJobId && !is2DOnly;
+  const canGenerate = isSprite
+    ? (prompt.trim().length > 0 && selectedPoses.length > 0)
+    : !!prospectingData?.prospectJobId;
 
   function handleLock() {
     if (!allApproved) return;
+    // Sprite mode doesn't feed the 3D Forge; emit empty view maps but carry
+    // the pose names so the 2D Forge can pull each frame's folder by pose.
+    const slots = isSprite
+      ? [] as { angle: ViewAngle }[]
+      : activeViews;
     const viewPaths = Object.fromEntries(
-      VIEWS.map(v => [v.angle, views[v.angle].imageSrc ?? ""])
+      slots.map(v => [v.angle, views[v.angle].imageSrc ?? ""])
     ) as Record<ViewAngle, string>;
     const masks = Object.fromEntries(
-      VIEWS.map(v => [v.angle, views[v.angle].rgbaUrl ?? null])
+      slots.map(v => [v.angle, views[v.angle].rgbaUrl ?? null])
     ) as Record<ViewAngle, string | null>;
     const emptyDepth = Object.fromEntries(
-      VIEWS.map(v => [v.angle, null])
+      slots.map(v => [v.angle, null])
     ) as Record<ViewAngle, null>;
     onLock({
       views:        viewPaths,
       depthMaps:    emptyDepth,
       masks,
       smeltJobId,
-      prompt:       sourcePrompt,
+      smeltMode,
+      poses:        isSprite ? selectedPoses : undefined,
+      prompt:       isSprite ? prompt : sourcePrompt,
       prospectingData: prospectingData ?? null,
     });
   }
@@ -200,47 +339,122 @@ export default function Smelting({ prospectingData, onLock }: Props) {
       <aside className="smelt__panel">
         <div className="smelt__panel-scroll">
 
-          {/* Source image (locked prospect) */}
-          <div className="smelt__source">
-            <div className="smelt__source-header">
-              <span className="smelt__source-title">Locked Prospect</span>
-              <span className="badge badge--yellow">LOCKED</span>
+          {/* ── Mode toggle ────────────────────────────────── */}
+          {ENABLE_3D && (
+            <div className="smelt__mode-toggle">
+              <button
+                className={`smelt__mode-btn${smeltMode === "SPRITE" ? " active" : ""}`}
+                onClick={() => { setSmeltMode("SPRITE"); setPoseViews({}); }}
+              >
+                2D Sprite Sheet
+              </button>
+              <button
+                className={`smelt__mode-btn${smeltMode === "3D" ? " active" : ""}`}
+                onClick={() => { setSmeltMode("3D"); setViews(EMPTY_VIEWS); }}
+              >
+                3D Multi-View
+              </button>
             </div>
-            {sourceImage ? (
-              <img className="smelt__source-img" src={sourceImage} alt="Locked prospect" />
-            ) : (
-              <div className="smelt__source-placeholder">
-                <span style={{ fontSize: 28, opacity: 0.3 }}>&#128444;</span>
-                <span>No prospect locked yet</span>
-              </div>
-            )}
-          </div>
+          )}
 
-          {/* 2D-only asset type warning */}
-          {is2DOnly && (
-            <div style={{
-              background: "rgba(255,200,0,0.08)",
-              border: "1px solid rgba(255,200,0,0.25)",
-              borderRadius: "var(--radius-sm)",
-              padding: "var(--space-3)",
-              marginBottom: "var(--space-3)",
-              color: "var(--yellow-bright)",
-              fontSize: "var(--text-xs)",
-              lineHeight: 1.5,
-            }}>
-              ⚠ <strong>{(prospectingData?.assetType ?? "").replace("_", " ").toUpperCase()}</strong> is
-              a 2D asset type. Multi-view generation and 3D mesh reconstruction require a 3D asset
-              type (Weapon, Character, Prop, etc.). Go back to Prospecting and select a 3D type.
+          {/* ── Character prompt (SPRITE / tiled — prompt-driven) ── */}
+          {isSprite && (
+            <div className="smelt__prompt-box">
+              <label className="smelt__prompt-label" htmlFor="smelt-prompt">
+                Describe your character
+              </label>
+              <textarea
+                id="smelt-prompt"
+                className="smelt__prompt-input"
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                placeholder="e.g. orc warrior with axe, fantasy game character"
+                rows={3}
+                disabled={anyGenerating}
+              />
+              <div className="smelt__asset-row">
+                <span className="smelt__asset-label">Type</span>
+                <select
+                  className="smelt__asset-select"
+                  value={assetType}
+                  onChange={e => setAssetType(e.target.value)}
+                  disabled={anyGenerating}
+                >
+                  <option value="character">Character</option>
+                  <option value="creature">Creature</option>
+                  <option value="prop">Prop / Object</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* ── Pose picker (SPRITE mode only) ─────────────── */}
+          {smeltMode === "SPRITE" && (
+            <div className="smelt__pose-picker">
+              <div className="smelt__pose-picker-header">
+                <span className="smelt__pose-picker-title">Poses</span>
+                <span className="smelt__pose-picker-count">
+                  {selectedPoses.length} / {posePresets.length}
+                </span>
+              </div>
+              <div className="smelt__pose-chips">
+                {posePresets.length === 0 ? (
+                  <span className="smelt__pose-loading">Loading pose library…</span>
+                ) : (
+                  posePresets.map(p => {
+                    const on = selectedPoses.includes(p.name);
+                    return (
+                      <button
+                        key={p.name}
+                        className={`smelt__pose-chip${on ? " active" : ""}`}
+                        onClick={() => togglePose(p.name)}
+                        title={p.prompt_hint}
+                        disabled={anyGenerating}
+                      >
+                        <img
+                          className="smelt__pose-chip-thumb"
+                          src={`${BACKEND}/api/poses/${p.name}/preview.png?size=128`}
+                          alt=""
+                        />
+                        <span className="smelt__pose-chip-label">{p.label}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Source image (locked prospect — 3D multi-view mode only) */}
+          {!isSprite && (
+            <div className="smelt__source">
+              <div className="smelt__source-header">
+                <span className="smelt__source-title">Locked Prospect</span>
+                <span className="badge badge--yellow">LOCKED</span>
+              </div>
+              {sourceImage ? (
+                <img className="smelt__source-img" src={sourceImage} alt="Locked prospect" />
+              ) : (
+                <div className="smelt__source-placeholder">
+                  <span style={{ fontSize: 28, opacity: 0.3 }}>&#128444;</span>
+                  <span>No prospect locked yet</span>
+                </div>
+              )}
             </div>
           )}
 
           {/* Progress indicator */}
           <div className="smelt__progress-row">
-            <span className="smelt__progress-label">Views approved</span>
-            <span className="smelt__progress-count">{approvedCount} / {VIEWS.length}</span>
+            <span className="smelt__progress-label">
+              {smeltMode === "SPRITE" ? "Poses approved" : "Views approved"}
+            </span>
+            <span className="smelt__progress-count">{approvedCount} / {totalCount || 1}</span>
           </div>
           <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${(approvedCount / VIEWS.length) * 100}%` }} />
+            <div
+              className="progress-fill"
+              style={{ width: `${totalCount > 0 ? (approvedCount / totalCount) * 100 : 0}%` }}
+            />
           </div>
 
         </div>
@@ -249,68 +463,113 @@ export default function Smelting({ prospectingData, onLock }: Props) {
         <div className="smelt__panel-footer">
           {!canGenerate && (
             <div className="smelt__no-prospect-hint">
-              Lock a Prospect first
+              {isSprite ? "Enter a prompt and pick at least one pose" : "Lock a Prospect first"}
             </div>
+          )}
+          {anyGenerating && genProgress && (
+            <div className="smelt__gen-progress">{genProgress}</div>
           )}
           <button
             className="smelt__gen-all-btn"
             onClick={generateAll}
             disabled={anyGenerating || !canGenerate}
-            title={!canGenerate ? "Lock a Prospect image before generating views" : undefined}
+            title={!canGenerate ? "Lock a Prospect image first" : undefined}
           >
             {anyGenerating
-              ? <><span className="spinner" style={{ borderTopColor: "#000" }} /> Generating 6 Views...</>
-              : <>Generate All Views</>}
+              ? <><span className="spinner" style={{ borderTopColor: "#000" }} /> Generating...</>
+              : smeltMode === "SPRITE"
+                ? <>Generate Sprite Sheet</>
+                : <>Generate All Views</>}
           </button>
           <button
             className="smelt__lock-btn"
             onClick={handleLock}
             disabled={!allApproved}
           >
-            Lock In Smelt
+            {smeltMode === "SPRITE" ? "Send Sprite Sheet" : "Lock for 3D Forge"}
           </button>
         </div>
       </aside>
 
-      {/* ── RIGHT: 3×2 VIEW GRID ─────────────────────────────── */}
-      <div className="smelt__grid">
-        {VIEWS.map(({ angle, label, icon, hint }) => (
-          <ViewPanel
-            key={angle}
-            angle={angle}
-            label={label}
-            icon={icon}
-            hint={hint}
-            state={views[angle]}
-            onApprove={() => approve(angle)}
-            onReject={() => reject(angle)}
-            onExpand={() => setLightbox(angle)}
-          />
-        ))}
-      </div>
-
-      {/* ── Lightbox overlay ─────────────────────────────────── */}
-      {lightbox && views[lightbox].imageSrc && (
-        <div className="smelt__lightbox" onClick={() => setLightbox(null)}>
-          <div className="smelt__lightbox-inner" onClick={e => e.stopPropagation()}>
-            <div className="smelt__lightbox-header">
-              <span className="smelt__lightbox-title">
-                {VIEWS.find(v => v.angle === lightbox)?.icon}{" "}
-                {VIEWS.find(v => v.angle === lightbox)?.label} View
-              </span>
-              <div style={{ display: "flex", gap: "var(--space-2)" }}>
-                <button className="view-btn view-btn--approve"
-                  onClick={() => { approve(lightbox); setLightbox(null); }}>
-                  Approve
-                </button>
-                <button className="win-btn win-btn--close" onClick={() => setLightbox(null)}>X</button>
-              </div>
+      {/* ── RIGHT: VIEW GRID (3×2 in 3D, 2×2 in 2D, flex in SPRITE) ──── */}
+      {smeltMode === "SPRITE" ? (
+        <div className="smelt__grid smelt__grid--sprite">
+          {selectedPoses.length === 0 ? (
+            <div className="smelt__sprite-empty">
+              Pick at least one pose from the library on the left to start.
             </div>
-            <img src={views[lightbox].imageSrc!} alt={`${lightbox} view`}
-              className="smelt__lightbox-img" />
-          </div>
+          ) : (
+            selectedPoses.map(name => {
+              const preset = posePresets.find(p => p.name === name);
+              const vs = poseViews[name] ?? { status: "idle" as ViewStatus, imageSrc: null, rgbaUrl: null, error: null };
+              const iconMap: Record<string, string> = { front: "⬆", back: "⬇", side: "➡" };
+              return (
+                <ViewPanel
+                  key={name}
+                  angle={name as ViewAngle}
+                  label={preset?.label ?? name}
+                  icon={iconMap[preset?.direction ?? "front"] ?? "●"}
+                  hint={preset?.direction ?? ""}
+                  state={vs}
+                  onApprove={() => approvePose(name)}
+                  onReject={() => rejectPose(name)}
+                  onExpand={() => setLightbox(name as ViewAngle)}
+                />
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <div className="smelt__grid">
+          {activeViews.map(({ angle, label, icon, hint }) => (
+            <ViewPanel
+              key={angle}
+              angle={angle}
+              label={label}
+              icon={icon}
+              hint={hint}
+              state={views[angle]}
+              onApprove={() => approve(angle)}
+              onReject={() => reject(angle)}
+              onExpand={() => setLightbox(angle)}
+            />
+          ))}
         </div>
       )}
+
+      {/* ── Lightbox overlay ─────────────────────────────────── */}
+      {lightbox && (() => {
+        const spriteVs = isSprite ? poseViews[lightbox as string] : null;
+        const viewVs   = !isSprite ? views[lightbox] : null;
+        const vs = spriteVs ?? viewVs;
+        if (!vs?.imageSrc) return null;
+        const preset = isSprite ? posePresets.find(p => p.name === lightbox) : null;
+        const labelText = preset?.label ?? VIEWS.find(v => v.angle === lightbox)?.label ?? lightbox;
+        const iconText  = VIEWS.find(v => v.angle === lightbox)?.icon ?? "●";
+        const onApproveFromLightbox = () => {
+          if (isSprite) approvePose(lightbox as string);
+          else          approve(lightbox);
+          setLightbox(null);
+        };
+        return (
+          <div className="smelt__lightbox" onClick={() => setLightbox(null)}>
+            <div className="smelt__lightbox-inner" onClick={e => e.stopPropagation()}>
+              <div className="smelt__lightbox-header">
+                <span className="smelt__lightbox-title">
+                  {iconText} {labelText}
+                </span>
+                <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                  <button className="view-btn view-btn--approve" onClick={onApproveFromLightbox}>
+                    Approve
+                  </button>
+                  <button className="win-btn win-btn--close" onClick={() => setLightbox(null)}>X</button>
+                </div>
+              </div>
+              <img src={vs.imageSrc} alt={`${lightbox}`} className="smelt__lightbox-img" />
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

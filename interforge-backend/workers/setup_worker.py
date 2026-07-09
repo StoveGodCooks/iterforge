@@ -44,12 +44,24 @@ PYTHON_DEPS_MAP: dict[str, dict] = {
 }
 
 MODELS_MAP: dict[str, dict] = {
-    "juggernaut_xl": {
-        "name":     "Juggernaut XL v9 (SDXL checkpoint)",
-        "filename": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors",
+    "dreamshaper_xl": {
+        "name":     "DreamShaper XL v2.1 (SDXL checkpoint)",
+        "filename": "DreamShaperXL_v2_1.safetensors",
         "dest_dir": _mdir("checkpoints"),
-        "url":      "https://huggingface.co/RunDiffusion/Juggernaut-XL-v9/resolve/main/Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors",
+        "url":      "https://huggingface.co/Lykon/dreamshaper-xl-v2-turbo/resolve/main/DreamShaperXL_Turbo_v2.safetensors",
         "size_mb":  6800,
+    },
+    "controlnet_openpose_sdxl": {
+        "name":     "ControlNet OpenPose SDXL",
+        "filename": "config.json",
+        "dest_dir": _mdir("controlnet/openpose-sdxl"),
+        "hf_repo":  "thibaud/controlnet-openpose-sdxl-1.0",
+        "hf_allow_patterns": [
+            "config.json",
+            "diffusion_pytorch_model.safetensors",
+        ],
+        "url":      "https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0",
+        "size_mb":  2500,
     },
 }
 
@@ -100,7 +112,26 @@ async def run_setup_install(job: Job, params: dict) -> None:
             f"Downloading {model['name']}  (~{model['size_mb']:,} MB)",
         ))
         try:
-            await _download_with_progress(job, loop, model, dest_path)
+            if model.get("hf_repo"):
+                await _download_hf_repo(job, model, dest_dir)
+            else:
+                await _download_with_progress(job, loop, model, dest_path)
+
+            # Multi-file models (some model checkpoints ship alongside config files)
+            for extra in model.get("extra_files", []):
+                extra_path = dest_dir / extra["filename"]
+                if extra_path.exists():
+                    await job.push(log_event(
+                        f"Already present: {extra['filename']} — skipping"
+                    ))
+                    continue
+                await job.push(log_event(f"Fetching companion file: {extra['filename']}"))
+                await _download_with_progress(
+                    job, loop,
+                    {"name": extra["filename"], "url": extra["url"]},
+                    extra_path,
+                )
+
             await job.push(step_done_event(model_id, dest_path.name))
             installed.append(model_id)
         except Exception as exc:
@@ -175,3 +206,35 @@ async def _download_with_progress(
 
     await asyncio.to_thread(_download_thread)
     await _push_pct(100)
+
+
+async def _download_hf_repo(job: Job, model: dict, dest_dir: Path) -> None:
+    """
+    Snapshot-download a HuggingFace model repo (multi-file, e.g. ControlNet).
+
+    Uses huggingface_hub with allow_patterns so we only pull the weights
+    variants we need (fp16 shards + config). No per-file byte progress —
+    HF hub handles retries and caching internally — but we emit coarse
+    start/done progress for the UI.
+    """
+    repo        = model["hf_repo"]
+    name        = model["name"]
+    allow       = model.get("hf_allow_patterns")
+
+    await job.push(make_event(EventType.PROGRESS, {
+        "pct": 1, "message": f"Fetching {name} from HuggingFace…",
+    }))
+
+    def _snapshot() -> None:
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id=repo,
+            local_dir=str(dest_dir),
+            local_dir_use_symlinks=False,
+            allow_patterns=allow,
+        )
+
+    await asyncio.to_thread(_snapshot)
+    await job.push(make_event(EventType.PROGRESS, {
+        "pct": 100, "message": f"Downloaded {name}",
+    }))

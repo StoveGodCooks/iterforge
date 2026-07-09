@@ -17,6 +17,12 @@ class LightingPreset:
 
 
 LIGHTING_PRESETS: dict[str, LightingPreset] = {
+    "flat_asset": LightingPreset(
+        name="Flat Asset",
+        tokens="flat even lighting, no shadows, neutral light",
+        description="Flat shadowless lighting for 3D-reconstruction assets — SF3D-friendly. "
+                    "Directional/outdoor lighting bakes shadows into the mesh texture.",
+    ),
     "studio": LightingPreset(
         name="Studio",
         tokens=(
@@ -89,16 +95,18 @@ LIGHTING_PRESETS: dict[str, LightingPreset] = {
 
 # Default preset per asset type (used if user doesn't specify).
 DEFAULT_PRESET: dict[str, str] = {
-    "prop":             "studio",
-    "weapon":           "studio",
-    "armor":            "studio",
-    "character":        "outdoor_day",
-    "creature":         "outdoor_day",
-    "vehicle":          "outdoor_day",
-    "building":         "outdoor_day",
-    "dungeon_tile":     "dungeon",
-    "environment":      "outdoor_day",
-    "foliage":          "outdoor_day",
+    # 3D-reconstruction asset types default to FLAT lighting — directional/outdoor
+    # lighting bakes shadows into the SF3D mesh texture. Users can still override.
+    "prop":             "flat_asset",
+    "weapon":           "flat_asset",
+    "armor":            "flat_asset",
+    "character":        "flat_asset",
+    "creature":         "flat_asset",
+    "vehicle":          "flat_asset",
+    "building":         "flat_asset",
+    "dungeon_tile":     "flat_asset",
+    "environment":      "outdoor_day",   # 2D — no reconstruction, contextual light is fine
+    "foliage":          "flat_asset",
     "tileable_texture": "overcast",
     "skybox":           "outdoor_day",
     "vfx_element":      "magical",

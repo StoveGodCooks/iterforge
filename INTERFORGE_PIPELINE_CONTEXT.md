@@ -125,18 +125,12 @@ The reconstruction takes 6 RGBA images with known camera poses and builds a 3D m
 - Skips white/none fills (background paths)
 - **Benefit**: Sharper silhouette boundaries than raster alpha masks
 
-### Stage 4.1b: Alpha Mask Cleanup
-- Connected-component analysis via `scipy.ndimage.label`
-- Remove components smaller than 2% of the largest component
-- Strips shadow fragments, ground plane artifacts, rembg noise
-- Applied to both SVG-rasterized and raster alpha masks
-
 ### Stage 4.2: Visual Hull Carving
 - **Voxel grid**: 256³ = 16.7M voxels
-- **Volume bounds**: Auto-computed from FoV: `±(tan(fov/2) × radius × 0.95)` → ±0.382 for 30° FoV
+- **Volume bounds**: (−0.8, 0.8) in world coordinates
 - **Camera matrices**: 3×4 projection P = K @ Ext[:3,:]
-  - Intrinsic K: `focal = (image_size / 2) / tan(fov / 2)`, `cx = cy = image_size / 2`
-  - Extrinsic: `Rx(−elevation) @ Ry(azimuth)`, translate Z by radius (1.5), Y-flip for OpenCV
+  - Intrinsic K: `focal = image_size × 1.2`, `cx = cy = image_size / 2`
+  - Extrinsic: `Rx(−elevation) @ Ry(azimuth)`, translate Z by radius (1.5)
 - **Algorithm**:
   1. Initialize all voxels to 1.0 (occupied)
   2. For each camera view:
@@ -313,40 +307,30 @@ The reconstruction takes 6 RGBA images with known camera poses and builds a 3D m
 ### Camera Matrix Construction
 ```
 Intrinsic K (3×3):
-  focal = (image_size / 2) / tan(fov / 2)    # 1433px for 768px at 30° FoV
+  focal = image_size × 1.2
   cx = cy = image_size / 2
   K = [[focal, 0, cx], [0, focal, cy], [0, 0, 1]]
 
 Extrinsic (4×4):
   rot = Rx(-elevation_rad) @ Ry(azimuth_rad)
   rot[2,3] = radius (1.5)
-  rot[1,:] *= -1  # Y-flip: world Y-up → camera Y-down (OpenCV)
 
 Projection P (3×4) = K @ Extrinsic[:3,:]
-
-Volume bounds (auto-computed):
-  half_ext = tan(fov/2) × radius × 0.95 = 0.382
-  vol_bounds = (-0.382, +0.382)
 ```
 
 ### Questions to Validate
 1. Are the azimuth values (30/90/150/210/270/330) relative to the INPUT view or absolute? The official repo says "relative to input."
-2. ~~Is `focal = image_size × 1.2` correct?~~ **FIXED** — now derived from FoV: `focal = (image_size/2) / tan(15°) ≈ 1433` for 768px.
+2. Is `focal = image_size × 1.2` correct for Zero123++'s 30° FoV? For 30° FoV: `focal = (image_size/2) / tan(15°) ≈ image_size × 1.866`. Our `1.2` multiplier may be wrong.
 3. Is the extrinsic convention `Rx(-el) @ Ry(az)` correct, or should it be `Ry(az) @ Rx(-el)`?
 4. The radius 1.5 — is this the actual camera distance used during Zero123++ training?
 5. Should the reconstruction account for the alternating elevation (+20°/−10°) or can we approximate all views at the same elevation?
 
-### Known Bugs Fixed
+### Known Bugs Fixed This Session
 1. **Grid splitting**: Was 3×2 (wrong), fixed to 2×3 (correct). This caused every smelting view to be a mangled fragment.
 2. **Camera poses**: Were 0/60/120/180/240/300 at 30° elevation. Fixed to 30/90/150/210/270/330 with alternating +20°/−10° elevation.
 3. **Input preprocessing**: Was `.convert("RGB")` (black background). Fixed to proper crop + 75% fill + gray (127) background.
 4. **Visual hull silhouette_val**: Was `np.zeros()` (carved everything). Fixed to `np.ones()` (keep voxels with no info).
 5. **CAMERA_DISTANCE**: Was hardcoded 2.0. Fixed to read dynamically from CAMERA_POSES (1.5).
-6. **Focal length**: Was `image_size × 1.2` (effective 45° FoV, projections 1.56× too wide). Fixed to FoV-based: `focal = (image_size/2) / tan(fov/2)`.
-7. **Y-axis flip missing**: World Y-up but camera Y-down (OpenCV). Top of object projected to bottom of image. Fixed by negating Y row of extrinsic.
-8. **Volume bounds too large**: Was hardcoded (-0.8, 0.8) but 30° FoV camera at radius 1.5 can only see ±0.402. ~50% of voxels per axis were outside camera view and never carved → massive uncarvable blob. Fixed: auto-computed from FoV → ±0.382.
-9. **Shadow/ground artifacts**: Alpha threshold was > 32 (caught faint shadows). Raised to > 128 for bounding box and mask extraction. Added connected-component cleanup to strip small fragments.
-10. **Preprocessing alpha threshold**: Was > 32 for crop bounding box, included shadow pixels. Raised to > 128 so crop tightly frames the actual object body.
 
 ---
 

@@ -9,46 +9,57 @@ from __future__ import annotations
 
 # ── Universal base ────────────────────────────────────────────
 # Applied to every generation regardless of asset type or style.
+# Rule philosophy: fight the model's actual failure tendencies, not abstract
+# categories. SDXL loves shadows, reflections, and multi-object compositions —
+# suppress all three hard here rather than relying on asset-type layers.
 BASE_NEGATIVE = (
-    "blurry, low quality, worst quality, jpeg artifacts, watermark, signature, "
-    "text, username, out of frame, cropped, deformed, disfigured, bad anatomy, "
-    "extra limbs, cloned face, ugly, duplicate, morbid, mutilated, extra fingers, "
-    "fused fingers, too many fingers, long neck, mutation, poorly drawn, "
-    "bad proportions, gross proportions, malformed limbs, missing arms, "
-    "missing legs, extra arms, extra legs, "
-    "oversaturated, overexposed, underexposed, flat shading, plastic look, "
-    "low detail, low resolution, pixelated, noisy, grainy, washed out, "
-    "multiple objects, two objects, pair of objects, collection, group, "
-    "set of items, duplicated subject, mirrored, reflected copy"
+    # KEEP TIGHT: SDXL's CLIP encoders truncate the negative at ~77 tokens, so
+    # only the first ~77 actually apply — a 300-token list silently discards
+    # most of itself. Front-load the failure modes that corrupt rembg masks and
+    # reconstruction; per-asset negatives (incl. realism killers) follow and
+    # must also land inside the 77-token window.
+    # Gloss/specular AND shadow are the top mesh-corruptors: SF3D reads any
+    # luminance variation as geometry (a hotspot → a bump, a crevice → a dent),
+    # so kill both hard for 3D-reconstruction input.
+    "shadow, ground shadow, ambient occlusion, reflection, glossy, "
+    "specular highlights, shiny, reflective surface, wet look, plastic sheen, glare, "
+    "multiple objects, duplicate, gradient background, scene background, floor, pedestal, "
+    "blurry, low quality, jpeg artifacts, watermark, text, cropped, "
+    "deformed, bad anatomy, extra limbs, extra fingers, mutation"
 )
 
 # ── Per asset type negatives ──────────────────────────────────
 # These are appended AFTER the base negative.
 ASSET_NEGATIVES: dict[str, str] = {
     "prop": (
-        "floating parts, disconnected elements, impossible geometry, "
-        "multiple props, two props, pair, collection of items, "
-        "scene background, environment, floor, wall, shadow on ground"
+        # front-loaded scene-leak killers: SDXL loves grounding objects in a
+        # little diorama, which SF3D then reconstructs as one lump.
+        "diorama, terrain, grass, rocks, moss, ground scene, base platform, "
+        "multiple props, two props, collection, scene background, environment, "
+        "floor, wall, floating parts, impossible geometry"
     ),
     "weapon": (
         "bent blade, asymmetrical, broken, rusty unless intentional, "
         "floating parts, multiple weapons, two weapons, two swords, pair of swords, "
         "dual wield, crossed weapons, weapon rack, weapon display, "
-        "background clutter, human hands, non-weapon objects, impossible geometry"
+        "background clutter, human hands, non-weapon objects, impossible geometry, "
+        # Shadows and reflections destroy rembg mask quality on thin objects
+        "shadow beneath weapon, drop shadow, cast shadow on floor, "
+        "weapon reflection, glossy floor under weapon, surface reflection, "
+        "dramatic side lighting, rim light shadow, environment lighting"
     ),
     "armor": (
         "floating pieces, asymmetrical unless intentional, broken straps, "
         "inside-out, non-armor elements, background objects, on a person unless hero shot"
     ),
     "character": (
-        "extra heads, extra limbs, fused body parts, floating limbs, "
-        "bad hands, bad feet, poorly drawn face, asymmetrical eyes, "
-        "cross-eyed, wall-eyed, multiple characters, scene background"
+        # realism killers — SF3D wants matte stylized input (gloss/shadow become fake geometry)
+        "photorealistic, realistic skin, photograph, subsurface scattering, "
+        "dramatic lighting, hyperdetailed, fine detail, extra heads, bad hands"
     ),
     "creature": (
-        "extra heads, wrong number of limbs for creature type, "
-        "human features unless humanoid, bad anatomy, floating parts, "
-        "multiple creatures, complex background"
+        "photorealistic, realistic skin, photograph, dramatic lighting, "
+        "hyperdetailed, fine detail, extra heads, wrong limb count"
     ),
     "vehicle": (
         "floating wheels, asymmetrical unless stylized, broken geometry, "
@@ -69,8 +80,8 @@ ASSET_NEGATIVES: dict[str, str] = {
         "inconsistent light sources, artificial framing"
     ),
     "foliage": (
-        "animals, characters, buildings, non-plant elements, "
-        "floating leaves disconnected from branch, wilted unless autumn"
+        "diorama, terrain, grass patch, rocks, ground scene, pot, planter, "
+        "multiple plants, animals, characters, buildings, floating leaves"
     ),
     "tileable_texture": (
         "visible seams, gradient backgrounds, vignette, centered composition, "
