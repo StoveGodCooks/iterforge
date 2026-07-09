@@ -6,9 +6,8 @@ Architecture:
   /api/status          — subsystem health (backend / GPU / models)
   /api/setup/*         — Phase 8: environment check + installer
   /api/jobs/*          — job lifecycle + SSE stream
-  /api/prospect        — Phase 5: concept image generation
-  /api/smelt           — Phase 6: multi-view render
-  /api/forge           — Phase 7: mesh pipeline
+  /api/prospect        — concept image generation (SDXL)
+  /api/forge           — mesh pipeline (Stable Fast 3D)
 
 All pipeline jobs stream progress via SSE so the frontend can show
 real-time step-by-step updates without polling.
@@ -28,7 +27,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api import jobs, prospect, smelt, forge, forge2d, status, masterforge, setup, dev, publish, poses
+from api import jobs, prospect, forge, status, masterforge, setup, dev, publish
 
 # Ensure the projects output root exists before mounting
 PROJECTS_ROOT = Path.home() / "interforge-projects"
@@ -69,12 +68,9 @@ app.include_router(status.router)
 app.include_router(setup.router)
 app.include_router(jobs.router)
 app.include_router(prospect.router)
-app.include_router(smelt.router)
 app.include_router(forge.router)
-app.include_router(forge2d.router)
 app.include_router(masterforge.router)
 app.include_router(publish.router)
-app.include_router(poses.router)
 app.include_router(dev.router)
 
 # Serve generated images as static files.
