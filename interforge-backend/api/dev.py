@@ -26,9 +26,16 @@ from typing import AsyncIterator
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from core.config import PROJECTS_ROOT, OUTPUTS_URL, BACKEND_HOST, BACKEND_PORT, RECON_MODE
+from core.config import PROJECTS_ROOT, OUTPUTS_URL, BACKEND_HOST, BACKEND_PORT
+from core.paths import is_valid_job_id
 
 router = APIRouter(prefix="/dev", tags=["dev"])
+
+
+def _require_valid_job_id(job_id: str) -> None:
+    """Reject path-traversal / malformed job ids before they touch the FS."""
+    if not is_valid_job_id(job_id):
+        raise HTTPException(422, f"Invalid job id: {job_id!r}")
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -105,6 +112,7 @@ def list_jobs(limit: int = 50):
 @router.get("/job/{job_id}")
 def get_job(job_id: str):
     """Full detail for one job including file sizes and profile data."""
+    _require_valid_job_id(job_id)
     job_dir = PROJECTS_ROOT / job_id
     if not job_dir.exists():
         raise HTTPException(404, f"Job not found: {job_id}")
@@ -129,6 +137,7 @@ def get_job(job_id: str):
 @router.get("/profile/{job_id}")
 def get_profile(job_id: str):
     """Return raw profiler JSON for a job, or 404 if not yet generated."""
+    _require_valid_job_id(job_id)
     for stage in ("forge", "smelt", "prospect"):
         p = PROJECTS_ROOT / job_id / stage / f"profile_{job_id}.json"
         if p.exists():
@@ -199,11 +208,25 @@ async def system_health():
 async def run_tests(path: str = "tests/", args: str = "-v --tb=short"):
     """
     Run pytest and stream output as SSE.
-    path: test file or directory (relative to backend root)
+    path: test file or directory (relative to backend root, confined to it)
     args: extra pytest flags
+
+    Spawns a subprocess with caller-supplied arguments, so it is gated behind
+    the INTERFORGE_ENABLE_TEST_RUNNER env flag and disabled by default.
     """
+    if os.environ.get("INTERFORGE_ENABLE_TEST_RUNNER", "").lower() not in ("1", "true", "yes"):
+        raise HTTPException(
+            403,
+            "Test runner is disabled. Set INTERFORGE_ENABLE_TEST_RUNNER=1 to enable it.",
+        )
+
     backend_root = Path(__file__).parent.parent
-    cmd = [sys.executable, "-m", "pytest", path] + args.split()
+    # Confine `path` to the backend root — reject anything that resolves outside.
+    target = (backend_root / path).resolve()
+    if not target.is_relative_to(backend_root.resolve()):
+        raise HTTPException(422, "path must stay within the backend directory")
+
+    cmd = [sys.executable, "-m", "pytest", str(target)] + args.split()
 
     async def _stream() -> AsyncIterator[str]:
         yield f"data: {json.dumps({'type': 'start', 'cmd': ' '.join(cmd)})}\n\n"
@@ -234,6 +257,7 @@ def mesh_stats(job_id: str):
     Load the forge mesh (mesh_raw.ply → mesh_repaired.ply → asset.glb)
     and return triangle count, vertex count, manifold status, bounding box.
     """
+    _require_valid_job_id(job_id)
     forge_dir = PROJECTS_ROOT / job_id / "forge"
     if not forge_dir.exists():
         raise HTTPException(404, f"No forge output for job {job_id}")
@@ -405,7 +429,6 @@ def get_config():
         "OUTPUTS_URL":      OUTPUTS_URL,
         "BACKEND_HOST":     BACKEND_HOST,
         "BACKEND_PORT":     BACKEND_PORT,
-        "RECON_MODE":       RECON_MODE,
         "env_overrides": {
             k: v for k, v in os.environ.items()
             if k.startswith("INTERFORGE_")

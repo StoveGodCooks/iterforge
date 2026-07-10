@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import "../../styles/setup.css";
 
-const BACKEND = "http://127.0.0.1:7842";
+import { BACKEND, jobStreamUrl } from "../../api/client";
 
 // ── Types ────────────────────────────────────────────────────
 interface HardwareInfo {
@@ -115,7 +115,7 @@ export default function SetupWizard({ onClose }: Props) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const { job_id } = await res.json();
 
-      const sse = new EventSource(`${BACKEND}/api/jobs/${job_id}/stream`);
+      const sse = new EventSource(jobStreamUrl(job_id));
       sse.onmessage = (e) => {
         const ev: InstallEvent = JSON.parse(e.data);
         if (ev.type === "step_active") {

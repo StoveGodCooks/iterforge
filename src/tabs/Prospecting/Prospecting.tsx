@@ -10,7 +10,7 @@ import { useAnvilBoard } from "../../contexts/AnvilBoardContext";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ProspectingOutput, AssetType, ArtStyle, ReconstructionPath, ModelInfo } from "../../types/pipeline";
 
-const BACKEND = "http://127.0.0.1:7842";
+import { BACKEND, jobStreamUrl } from "../../api/client";
 
 interface ImageMeta {
   rawPath:            string | null;
@@ -287,7 +287,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
       filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
     });
     if (selected) {
-      const filePath = typeof selected === "string" ? selected : selected;
+      const filePath = Array.isArray(selected) ? selected[0] : selected;
       setImg2imgPath(filePath);
       // Also set preview src via backend URL
       setImg2imgSrc(`http://127.0.0.1:7842/outputs/../${filePath}`);
@@ -359,7 +359,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
     }
 
     // Subscribe to SSE stream
-    const evtSource = new EventSource(`${BACKEND}/api/jobs/${jobId}/stream`);
+    const evtSource = new EventSource(jobStreamUrl(jobId));
     sseRef.current = evtSource;
 
     // Watchdog: if nothing resolves within 15 minutes, surface an error

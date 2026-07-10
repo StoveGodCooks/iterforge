@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # ── GPU memory management ────────────────────────────────────
@@ -40,6 +41,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ── Startup checks ────────────────────────────────────────────
+def _startup_checks() -> None:
+    """Log GPU/memory config at startup for debugging."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            vram_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
+            sdpa = torch.backends.cuda.flash_sdp_enabled()
+            logger.info(f"[GPU] {gpu_name} — {vram_gb:.1f}GB VRAM")
+            logger.info(f"[GPU] SDPA (flash attention): {'enabled' if sdpa else 'DISABLED'}")
+            logger.info(f"[GPU] PYTORCH_CUDA_ALLOC_CONF={os.environ.get('PYTORCH_CUDA_ALLOC_CONF', 'not set')}")
+        else:
+            logger.warning("[GPU] No CUDA device found — running on CPU")
+    except Exception as exc:
+        logger.warning(f"[GPU] Startup check failed: {exc}")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    _startup_checks()
+    yield
+
+
 # ── App ───────────────────────────────────────────────────────
 app = FastAPI(
     title="InterForge Backend",
@@ -47,6 +72,7 @@ app = FastAPI(
     description="AI-powered game asset pipeline",
     docs_url="/docs",       # Swagger UI at http://127.0.0.1:7842/docs
     redoc_url="/redoc",
+    lifespan=_lifespan,
 )
 
 # Allow the Tauri WebView (and Vite dev server) to reach the API.
@@ -82,24 +108,6 @@ app.include_router(dev.router)
 # e.g. ~/interforge-projects/{job_id}/prospect/image_00.png
 #   → http://127.0.0.1:7842/outputs/{job_id}/prospect/image_00.png
 app.mount("/outputs", StaticFiles(directory=str(PROJECTS_ROOT)), name="outputs")
-
-
-@app.on_event("startup")
-def _startup_checks():
-    """Log GPU/memory config at startup for debugging."""
-    try:
-        import torch
-        if torch.cuda.is_available():
-            gpu_name = torch.cuda.get_device_name(0)
-            vram_gb = torch.cuda.get_device_properties(0).total_mem / 1024**3
-            sdpa = torch.backends.cuda.flash_sdp_enabled()
-            logger.info(f"[GPU] {gpu_name} — {vram_gb:.1f}GB VRAM")
-            logger.info(f"[GPU] SDPA (flash attention): {'enabled' if sdpa else 'DISABLED'}")
-            logger.info(f"[GPU] PYTORCH_CUDA_ALLOC_CONF={os.environ.get('PYTORCH_CUDA_ALLOC_CONF', 'not set')}")
-        else:
-            logger.warning("[GPU] No CUDA device found — running on CPU")
-    except Exception as exc:
-        logger.warning(f"[GPU] Startup check failed: {exc}")
 
 
 @app.get("/")

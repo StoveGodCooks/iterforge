@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { disposeObject3D } from "./disposeThree";
 
 interface Props {
   /** Full URL to the .glb file (e.g. http://127.0.0.1:7842/outputs/…/asset.glb) */
@@ -145,16 +146,7 @@ export default function MeshViewer({ glbUrl }: Props) {
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
-      scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          if (Array.isArray(obj.material)) {
-            obj.material.forEach((m) => m.dispose());
-          } else {
-            obj.material.dispose();
-          }
-        }
-      });
+      disposeObject3D(scene);
     };
   }, [glbUrl]);
 

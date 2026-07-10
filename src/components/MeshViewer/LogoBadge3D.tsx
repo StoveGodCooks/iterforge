@@ -6,6 +6,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { disposeObject3D } from "./disposeThree";
 
 interface Props {
   glbUrl: string;
@@ -66,6 +67,7 @@ export default function LogoBadge3D({ glbUrl, size = 150 }: Props) {
 
     return () => {
       cancelAnimationFrame(frameRef.current);
+      disposeObject3D(scene);   // free geometry + materials + textures
       renderer.dispose();
       if (renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);

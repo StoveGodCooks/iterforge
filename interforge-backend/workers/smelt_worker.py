@@ -1,14 +1,17 @@
 """
-Smelting pipeline worker — Zero123++ multi-view generation.
+Smelting pipeline worker — directional sprite generation.
 
-Generates 6 geometrically consistent views from a prospect reference image
-in a single Zero123++ forward pass.  Same SSE events, same output format,
-same job interface.
+Generates directional/multi-pose sprite frames from a locked prospect image
+using SDXL (DreamShaper XL) with ControlNet OpenPose to lock stance and
+IP-Adapter to preserve the character's identity across poses.
 
-Features:
-  - 6 consistent views in one pass (vs old 4× SDXL img2img)
-  - Direct VRAM control (load → generate → unload)
-  - try/finally guarantees VRAM cleanup on error
+Entry points:
+  - run_smelt_sprite_sheet — ControlNet OpenPose + IP-Adapter, one pass per pose
+  - run_smelt_tiled_sheet  — ControlNet-only, all frames in one tiled pass
+
+Each frame is saved under smelt/<pose_name>/image_00.png and emitted as a
+VIEW_READY SSE event. Direct VRAM control (load → generate → unload) with a
+try/finally that guarantees cleanup on error.
 """
 from __future__ import annotations
 
@@ -30,9 +33,9 @@ async def _heartbeat(job: Job, message: str, interval: float = 4.0):
     """
     Emit PROGRESS events every `interval` seconds while a blocking section runs.
 
-    Zero123++ first-run downloads ~3GB and inference takes ~30–60s with zero
-    network feedback — without this, the UI appears frozen.  Heartbeat sends
-    an elapsed-time progress tick so the frontend knows the job is alive.
+    Model first-run downloads are multi-GB and inference takes tens of seconds
+    with zero network feedback — without this, the UI appears frozen. Heartbeat
+    sends an elapsed-time progress tick so the frontend knows the job is alive.
     """
     stop = asyncio.Event()
 

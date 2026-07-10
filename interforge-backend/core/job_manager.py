@@ -102,8 +102,28 @@ class Job:
 
 _jobs: dict[str, Job] = {}
 
+# Cap the in-memory registry so a long-running desktop session doesn't leak
+# every job it ever ran. Only terminal jobs are evicted (oldest first).
+MAX_JOBS = 100
+_TERMINAL_STATUSES = {JobStatus.DONE, JobStatus.FAILED, JobStatus.CANCELLED}
+
+
+def _evict_old_jobs() -> None:
+    """Drop the oldest terminal jobs once the registry exceeds MAX_JOBS.
+    Running/pending jobs are never evicted."""
+    if len(_jobs) <= MAX_JOBS:
+        return
+    terminal = sorted(
+        (j for j in _jobs.values() if j.status in _TERMINAL_STATUSES),
+        key=lambda j: j.created_at,
+    )
+    for job in terminal:
+        if len(_jobs) <= MAX_JOBS:
+            break
+        _jobs.pop(job.id, None)
+
 # GPU lock — only one GPU job at a time.
-# Prevents concurrent model access on the ForgeEngine/Zero123Engine singletons.
+# Prevents concurrent model access on the ForgeEngine/SF3DEngine singletons.
 _gpu_lock: asyncio.Lock | None = None
 
 
@@ -118,6 +138,7 @@ def _get_gpu_lock() -> asyncio.Lock:
 def create_job(stage: str) -> Job:
     job = Job(id=str(uuid.uuid4()), stage=stage)
     _jobs[job.id] = job
+    _evict_old_jobs()
     return job
 
 
@@ -171,3 +192,27 @@ async def run_job(
             await _run()
     else:
         await _run()
+
+
+# Strong references to in-flight job tasks. asyncio only keeps a weak reference
+# to the tasks it schedules, so without this a job can be garbage-collected
+# mid-run. We discard each task from the set when it completes.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def spawn_job(
+    job: Job,
+    worker: Callable[[Job], Coroutine[Any, Any, None]],
+    *,
+    gpu: bool = True,
+) -> asyncio.Task:
+    """
+    Fire off run_job() as a background task with a retained strong reference.
+    Use this instead of a bare asyncio.create_task(run_job(...)) so the task
+    isn't GC'd while running. Pass gpu=False for non-GPU work (e.g. setup)
+    so it doesn't serialize behind the GPU lock.
+    """
+    task = asyncio.create_task(run_job(job, worker, gpu=gpu))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task

@@ -59,10 +59,10 @@ BUILTINS: list[ModelDef] = [
         license="OpenRAIL-M",
     ),
     ModelDef(
-        id="dreamshaper", label="DreamShaper XL",
+        id="dreamshaper", label="DreamShaper XL Turbo",
         kind="sdxl", source_type="local_file",
-        source="DreamShaperXL_v2_1.safetensors",
-        note="Versatile artistic SDXL — strong 2D art (not mesh-friendly).",
+        source="DreamShaperXL_Turbo_v2.safetensors",
+        note="Versatile artistic SDXL (Turbo) — strong 2D art (not mesh-friendly).",
         license="OpenRAIL-M",
     ),
     ModelDef(

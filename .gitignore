@@ -10,12 +10,10 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
-.env
 .venv
 env/
 venv/
 *.egg-info/
-dist/
 build/
 .pytest_cache/
 *.log
@@ -75,6 +73,5 @@ desktop.ini
 *.pem
 secrets.json
 
-# ── Vendored third-party source (TripoSR etc.) ───────────────────
-# Cloned by the user on setup, not tracked in InterForge.
-interforge-backend/vendor/
+# ── Backend test artifacts ───────────────────────────────────────
+interforge-backend/_test_output.png

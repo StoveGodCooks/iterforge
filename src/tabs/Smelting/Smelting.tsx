@@ -11,7 +11,7 @@ import type {
   SmeltingOutput, ProspectingOutput, PosePreset, PoseLibraryResponse, ViewAngle,
 } from "../../types/pipeline";
 
-const BACKEND = "http://127.0.0.1:7842";
+import { BACKEND, jobStreamUrl } from "../../api/client";
 
 type ViewStatus = "idle" | "generating" | "done" | "approved" | "rejected" | "error";
 
@@ -154,7 +154,7 @@ export default function Smelting({ prospectingData, onLock }: Props) {
       const { job_id } = await res.json();
       setSmeltJobId(job_id);
 
-      const sse = new EventSource(`${BACKEND}/api/jobs/${job_id}/stream`);
+      const sse = new EventSource(jobStreamUrl(job_id));
       sseRef.current = sse;
 
       sse.onmessage = (e) => {

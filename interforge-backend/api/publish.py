@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from core.config import PROJECTS_ROOT
+from core.paths import is_valid_job_id
 
 router = APIRouter()
 log    = logging.getLogger(__name__)
@@ -122,6 +123,8 @@ async def build_sprite_atlas(req: SpriteAtlasRequest, include_json: bool = False
 
     if not req.smelt_job_id:
         raise HTTPException(status_code=422, detail="smelt_job_id is required")
+    if not is_valid_job_id(req.smelt_job_id):
+        raise HTTPException(status_code=422, detail="Invalid smelt_job_id")
 
     try:
         atlas_path, manifest = await asyncio.to_thread(

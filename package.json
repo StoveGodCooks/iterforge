@@ -2,6 +2,12 @@
   "name": "interforge",
   "version": "0.1.0",
   "private": true,
+  "description": "Free, local, open-source AI game-asset pipeline: text prompt to textured 3D mesh.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cor-sys/iterforge.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

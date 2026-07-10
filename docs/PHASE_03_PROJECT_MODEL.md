@@ -18,8 +18,8 @@ Projects are the permanent memory layer of InterForge. They must be able to hold
 
 ## Source Files
 
-- [projects.ts](/C:/Users/beebo/OneDrive/Desktop/interforge-NEW/src/types/projects.ts)
-- [projectStorage.ts](/C:/Users/beebo/OneDrive/Desktop/interforge-NEW/src/components/Projects/projectStorage.ts)
+- [projects.ts](../src/types/projects.ts)
+- [projectStorage.ts](../src/components/Projects/projectStorage.ts)
 
 ## Core Model
 

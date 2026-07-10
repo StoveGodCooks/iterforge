@@ -10,7 +10,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from core.job_manager import create_job, run_job
+from core.job_manager import create_job, spawn_job
+from core.config import PROJECTS_ROOT
 
 router = APIRouter()
 
@@ -60,7 +61,7 @@ async def start_prospect(req: ProspectRequest):
         from workers.prospect_worker import run_prospect
         await run_prospect(j, params)
 
-    asyncio.create_task(run_job(job, _worker))
+    spawn_job(job, _worker)
 
     return {"job_id": job.id, "status": job.status}
 
@@ -74,7 +75,12 @@ async def regen_svg(req: SvgRequest):
     """
     from core.postprocess import trace_to_svg
 
-    path = Path(req.image_path)
+    # Confine reads to the projects root — the Regen SVG button always operates
+    # on a pipeline output image, so an absolute path outside it is not valid
+    # and would otherwise be an arbitrary local-file read.
+    path = Path(req.image_path).resolve()
+    if not path.is_relative_to(PROJECTS_ROOT.resolve()):
+        raise HTTPException(status_code=403, detail="Image path must be within the projects directory.")
     if not path.exists():
         raise HTTPException(status_code=404, detail="Image not found.")
 

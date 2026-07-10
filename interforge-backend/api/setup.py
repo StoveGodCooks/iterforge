@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from core.config import MODELS_ROOT
-from core.job_manager import create_job, run_job
+from core.job_manager import create_job, spawn_job
 from workers.setup_worker import run_setup_install
 
 router = APIRouter()
@@ -93,8 +93,8 @@ REQUIRED_MODELS = [
         # props, and stylized renders. Used by Prospect (txt2img) and
         # Smelt 2D (IP-Adapter direction generation).
         "id":       "dreamshaper_xl",
-        "name":     "DreamShaper XL v2.1 (SDXL checkpoint)",
-        "filename": "DreamShaperXL_v2_1.safetensors",
+        "name":     "DreamShaper XL Turbo (optional SDXL checkpoint)",
+        "filename": "DreamShaperXL_Turbo_v2.safetensors",
         "dest_dir": _models_dir("checkpoints"),
         "url":      "https://huggingface.co/Lykon/dreamshaper-xl-v2-turbo/resolve/main/DreamShaperXL_Turbo_v2.safetensors",
         "size_mb":  6800,
@@ -104,15 +104,17 @@ REQUIRED_MODELS = [
         # Multi-file HF repo rather than a single safetensors — the setup
         # worker calls huggingface_hub.snapshot_download when "hf_repo" is set.
         "id":       "controlnet_openpose_sdxl",
-        "name":     "ControlNet OpenPose SDXL",
+        "name":     "ControlNet OpenPose SDXL (xinsir)",
         "filename": "config.json",                  # sentinel file used for presence check
         "dest_dir": _models_dir("controlnet/openpose-sdxl"),
-        "hf_repo":  "thibaud/controlnet-openpose-sdxl-1.0",
+        # xinsir has markedly stronger pose adherence than thibaud's — matches
+        # the engine's preferred fallback (see inference/engine.py).
+        "hf_repo":  "xinsir/controlnet-openpose-sdxl-1.0",
         "hf_allow_patterns": [
             "config.json",
             "diffusion_pytorch_model.safetensors",
         ],
-        "url":      "https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0",
+        "url":      "https://huggingface.co/xinsir/controlnet-openpose-sdxl-1.0",
         "size_mb":  2500,
     },
 ]
@@ -229,5 +231,5 @@ async def start_setup_install(req: InstallRequest):
     async def _worker(j):
         await run_setup_install(j, {"items": req.items})
 
-    asyncio.create_task(run_job(job, _worker))
+    spawn_job(job, _worker, gpu=False)  # setup installs deps/downloads — no GPU needed
     return {"job_id": job.id, "status": job.status}

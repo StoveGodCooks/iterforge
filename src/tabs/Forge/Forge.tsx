@@ -9,7 +9,7 @@ import { useAssetTray } from "../../contexts/AssetTrayContext";
 
 const MeshViewer = lazy(() => import("../../components/MeshViewer/MeshViewer"));
 
-const BACKEND = "http://127.0.0.1:7842";
+import { BACKEND, jobStreamUrl } from "../../api/client";
 
 /* ── Local types ─────────────────────────────────────────── */
 type Pipeline  = "mesh" | "mesh2d" | "sprite" | "2D" | null;
@@ -338,7 +338,7 @@ function MeshPipeline({ variant = "3d", smeltingData, prospectingData, onBack, o
 
       const { job_id } = await res.json();
       setJobId(job_id);
-      const sse = new EventSource(`${BACKEND}/api/jobs/${job_id}/stream`);
+      const sse = new EventSource(jobStreamUrl(job_id));
       sseRef.current = sse;
 
       sse.onmessage = (e) => {
@@ -1121,7 +1121,7 @@ function TwoDPipeline({ smeltingData, onBack }: TwoDPipelineProps) {
       }
 
       const { job_id } = await res.json();
-      const sse = new EventSource(`${BACKEND}/api/jobs/${job_id}/stream`);
+      const sse = new EventSource(jobStreamUrl(job_id));
       sseRef.current = sse;
 
       sse.onmessage = (e) => {

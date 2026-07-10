@@ -1,23 +1,55 @@
-# InterForge Backend — Pinned Dependencies
-# Python 3.11 | CUDA 12.1 | RTX 3070 (8GB)
-# Tested and verified 2026-04-05
+# InterForge Backend — Python dependencies
+# Python 3.11 | 8GB-tier baseline target: NVIDIA GPU w/ CUDA 12.1 (e.g. RTX 3070)
+#
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ INSTALL ORDER MATTERS. Do NOT just `pip install -r requirements.txt`.      │
+# │                                                                            │
+# │  1. Install PyTorch with the CUDA 12.1 wheel FIRST (see [PyTorch] below).  │
+# │  2. pip install -r requirements.txt                                        │
+# │  3. Install SF3D + texture_baker from git (see [SF3D] below).              │
+# └──────────────────────────────────────────────────────────────────────────┘
 
-# ── Core inference ───────────────────────────────────────────
+# ── [PyTorch] install manually, before this file ─────────────────────────────
+# GPU (CUDA 12.1):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+# CPU-only (frontend/API dev, no inference):
+#   pip install torch
+# (torch is intentionally NOT pinned here — the correct wheel depends on your
+#  CUDA version and is not resolvable from PyPI's default index.)
+
+# ── Web framework / API ──────────────────────────────────────────────────────
+fastapi==0.135.2
+uvicorn==0.42.0
+starlette==1.0.0
+sse-starlette==3.3.3
+python-multipart==0.0.22
+pydantic==2.12.5
+pydantic-settings==2.14.0
+psutil==7.2.2
+
+# ── Diffusion / image generation (Prospect) ──────────────────────────────────
 diffusers==0.37.1
-torch==2.5.1+cu121
-transformers==5.3.0
+transformers==5.5.0
+accelerate==1.13.0
+huggingface_hub==1.9.0
 
-# ── 3D reconstruction ───────────────────────────────────────
-open3d==0.19.0
-trimesh==4.11.4
-scipy==1.17.1
-scikit-image==0.26.0
-
-# ── Image processing ────────────────────────────────────────
+# ── Image processing (Smelt / Forge2D) ───────────────────────────────────────
 Pillow==12.1.1
-numpy==2.3.5
+numpy==2.3.4
+scipy==1.16.3
+scikit-image==0.26.0
 rembg==2.0.73
-vtracer
+vtracer          # SVG contour tracing (no stable release pin; latest is fine)
 
-# ── Install torch with CUDA 12.1 ────────────────────────────
-# pip install torch==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+# ── Mesh / 3D (Forge, SF3D output handling) ──────────────────────────────────
+trimesh==4.11.5
+xatlas==0.0.11
+
+# ── [SF3D] install manually, after this file (GPU 8GB tier only) ──────────────
+# Stable Fast 3D is the single-image→mesh engine. It is NOT on PyPI — install
+# from Stability AI's repo along with its texture_baker CUDA extension:
+#   pip install git+https://github.com/Stability-AI/stable-fast-3d.git
+# See README.md → "GPU setup" for the full walkthrough and license note.
+#
+# NOTE: open3d / cadquery were dependencies of the retired hard-surface CAD
+# reconstruction path and are no longer required.

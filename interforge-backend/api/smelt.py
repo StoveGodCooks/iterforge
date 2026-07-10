@@ -18,7 +18,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from core.job_manager import create_job, run_job
+from core.job_manager import create_job, spawn_job
 
 router = APIRouter()
 
@@ -72,6 +72,6 @@ async def start_smelt(req: SmeltRequest):
             from workers.smelt_worker import run_smelt_tiled_sheet
             await run_smelt_tiled_sheet(j, params)
 
-    asyncio.create_task(run_job(job, _worker))
+    spawn_job(job, _worker)
 
     return {"job_id": job.id, "status": job.status}

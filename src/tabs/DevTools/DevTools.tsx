@@ -9,8 +9,9 @@
  *  Config    — current backend runtime config
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BACKEND, jobStreamUrl } from "../../api/client";
 
-const API = "http://127.0.0.1:7842/dev";
+const API = `${BACKEND}/dev`;
 
 type Panel = "overview" | "jobs" | "tests" | "health" | "config" | "e2e" | "sse" | "loft";
 
@@ -35,6 +36,7 @@ interface JobMeta {
   job_id: string;
   stages: string[];
   files: Record<string, string[]>;
+  file_sizes?: Record<string, Record<string, number>>;
   profile: Profile | null;
   project_json: Record<string, unknown> | null;
   modified_iso: string;
@@ -106,7 +108,7 @@ export default function DevTools() {
         ))}
         <div style={{ flex: 1 }} />
         <a
-          href="http://127.0.0.1:7842/docs"
+          href={`${BACKEND}/docs`}
           target="_blank"
           rel="noreferrer"
           style={styles.docsLink}
@@ -279,7 +281,7 @@ function JobsPanel() {
                       {f}
                       {detail.file_sizes?.[stage]?.[f] !== undefined && (
                         <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
-                          {fmtBytes((detail as unknown as Record<string, Record<string, Record<string, number>>>)["file_sizes"][stage][f])}
+                          {fmtBytes(detail.file_sizes[stage][f])}
                         </span>
                       )}
                     </div>
@@ -482,7 +484,7 @@ function ConfigPanel() {
           <KV key={k} label={k} value={String(v)} />
         ))}
       </div>
-      {config.env_overrides && Object.keys(config.env_overrides as object).length > 0 && (
+      {!!config.env_overrides && Object.keys(config.env_overrides as object).length > 0 && (
         <>
           <SectionHeading style={{ marginTop: 16 }}>Environment Overrides</SectionHeading>
           <div style={styles.grid2}>
@@ -492,7 +494,7 @@ function ConfigPanel() {
           </div>
         </>
       )}
-      {config.env_overrides && Object.keys(config.env_overrides as object).length === 0 && (
+      {!!config.env_overrides && Object.keys(config.env_overrides as object).length === 0 && (
         <Muted style={{ marginTop: 8 }}>No INTERFORGE_* environment variables set.</Muted>
       )}
     </div>
@@ -682,7 +684,7 @@ function SSEMonitorPanel() {
     setEvents([]);
     setStreaming(true);
     try {
-      const resp = await fetch(`http://127.0.0.1:7842/api/jobs/${jobId}/stream`);
+      const resp = await fetch(jobStreamUrl(jobId));
       const reader = resp.body!.getReader();
       readerRef.current = reader;
       const decoder = new TextDecoder();

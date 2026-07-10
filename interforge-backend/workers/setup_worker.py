@@ -45,22 +45,24 @@ PYTHON_DEPS_MAP: dict[str, dict] = {
 
 MODELS_MAP: dict[str, dict] = {
     "dreamshaper_xl": {
-        "name":     "DreamShaper XL v2.1 (SDXL checkpoint)",
-        "filename": "DreamShaperXL_v2_1.safetensors",
+        "name":     "DreamShaper XL Turbo (optional SDXL checkpoint)",
+        "filename": "DreamShaperXL_Turbo_v2.safetensors",
         "dest_dir": _mdir("checkpoints"),
         "url":      "https://huggingface.co/Lykon/dreamshaper-xl-v2-turbo/resolve/main/DreamShaperXL_Turbo_v2.safetensors",
         "size_mb":  6800,
     },
     "controlnet_openpose_sdxl": {
-        "name":     "ControlNet OpenPose SDXL",
+        "name":     "ControlNet OpenPose SDXL (xinsir)",
         "filename": "config.json",
         "dest_dir": _mdir("controlnet/openpose-sdxl"),
-        "hf_repo":  "thibaud/controlnet-openpose-sdxl-1.0",
+        # xinsir has markedly stronger pose adherence than thibaud's — matches
+        # the engine's preferred fallback (see inference/engine.py).
+        "hf_repo":  "xinsir/controlnet-openpose-sdxl-1.0",
         "hf_allow_patterns": [
             "config.json",
             "diffusion_pytorch_model.safetensors",
         ],
-        "url":      "https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0",
+        "url":      "https://huggingface.co/xinsir/controlnet-openpose-sdxl-1.0",
         "size_mb":  2500,
     },
 }

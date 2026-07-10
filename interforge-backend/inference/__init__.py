@@ -1,1 +1,1 @@
-# InterForge GPU inference — diffusers + Depth Anything V2 + TSDF.
+# InterForge GPU inference — diffusers (SDXL) + Stable Fast 3D + Depth Anything V2.

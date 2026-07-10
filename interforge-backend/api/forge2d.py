@@ -21,7 +21,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from core.job_manager import create_job, run_job
+from core.job_manager import create_job, spawn_job
 
 router = APIRouter()
 
@@ -60,6 +60,6 @@ async def start_forge2d(req: TwoDForgeRequest):
         from workers.forge2d_worker import run_forge2d
         await run_forge2d(j, params)
 
-    asyncio.create_task(run_job(job, _worker))
+    spawn_job(job, _worker)
 
     return {"job_id": job.id, "status": job.status}

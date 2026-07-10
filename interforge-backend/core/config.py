@@ -32,9 +32,3 @@ MODELS_ROOT = Path(os.environ.get(
 # drops in by hand). Centralized so engine.py / status.py / the model registry
 # all agree on one path.
 CHECKPOINTS_DIR = MODELS_ROOT / "checkpoints"
-
-# ── Reconstruction mode ──────────────────────────────────────
-# "tsdf"        → Depth Anything V2 + TSDF volumetric fusion (best quality)
-# "visual_hull" → alpha silhouette space carving (no depth model needed)
-# "auto"        → try TSDF first, fall back to visual hull
-RECON_MODE = os.environ.get("INTERFORGE_RECON_MODE", "auto").lower()

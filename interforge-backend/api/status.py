@@ -49,37 +49,28 @@ def _check_gpu() -> dict:
 
 
 # ── Models ───────────────────────────────────────────────────
-
-_APPDATA = os.environ.get("APPDATA", str(Path.home()))
-_CKPT = "DreamShaperXL_v2_1.safetensors"
-_LEGACY_CKPT = "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
-
-_REQUIRED_MODELS: list[dict] = [
-    {
-        "name": "DreamShaper XL v2.1 (SDXL checkpoint)",
-        "env_key": "INTERFORGE_SDXL_CHECKPOINT",
-        "default_paths": [
-            f"{_APPDATA}/IterForge/models/checkpoints/{_CKPT}",
-            # Legacy fallback — pre-Phase 14 installs still have Juggernaut
-            f"{_APPDATA}/IterForge/models/checkpoints/{_LEGACY_CKPT}",
-        ],
-    },
-]
-
+# The model registry is the single source of truth for the default checkpoint
+# (see inference/model_registry.py). Status derives its check from whatever the
+# registry marks as default, so the three never drift apart again.
 
 def _check_models() -> dict:
-    missing = []
-    for spec in _REQUIRED_MODELS:
-        path_str = os.environ.get(spec["env_key"], "")
-        candidates = [Path(path_str)] if path_str else []
-        candidates += [Path(p).expanduser() for p in spec["default_paths"]]
-        found = any(p.exists() for p in candidates)
-        if not found:
-            missing.append(spec["name"])
+    from inference.model_registry import default_model
+    from core.config import CHECKPOINTS_DIR
 
-    if missing:
-        return {"status": "missing", "missing": missing}
-    return {"status": "ok", "missing": []}
+    dm = default_model()
+
+    # hf_repo models (e.g. base SDXL) are fetched + cached by diffusers on first
+    # use — there's nothing to pre-install, so report ok.
+    if dm.source_type == "hf_repo":
+        return {"status": "ok", "missing": [], "default_model": dm.label}
+
+    # local_file models must be present in the checkpoints dir (or pointed at by
+    # INTERFORGE_SDXL_CHECKPOINT).
+    env_override = os.environ.get("INTERFORGE_SDXL_CHECKPOINT", "")
+    candidates = ([Path(env_override)] if env_override else []) + [CHECKPOINTS_DIR / dm.source]
+    if any(p.exists() for p in candidates):
+        return {"status": "ok", "missing": [], "default_model": dm.label}
+    return {"status": "missing", "missing": [dm.label], "default_model": dm.label}
 
 
 # ── Route ─────────────────────────────────────────────────────

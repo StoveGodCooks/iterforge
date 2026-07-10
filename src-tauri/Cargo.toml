@@ -1,9 +1,11 @@
 [package]
 name        = "interforge"
 version     = "0.1.0"
-description = "InterForge — AI-powered game asset pipeline"
+description = "InterForge — free, local, open-source AI game-asset pipeline"
 authors     = ["InterForge"]
 edition     = "2021"
+license     = "MIT"
+repository  = "https://github.com/Cor-sys/iterforge"
 
 # lib target lets the same code compile for desktop and (future) mobile
 [lib]
