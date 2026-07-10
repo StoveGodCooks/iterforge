@@ -5,7 +5,7 @@
    ============================================================ */
 
 /* -- Fonts -------------------------------------------------- */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* -- Other style files -------------------------------------- */
 @import './components.css';
@@ -26,44 +26,48 @@
      Space-black backgrounds, brushed/polished steel accents. Token names
      kept (yellow/ember/forge) so every component recolors from here. */
 
-  /* --- Backgrounds: deep space-black (cool) --- */
-  --bg-void:        #050608;   /* space black — app floor           */
-  --bg-base:        #0B0E12;   /* top bar, panels                   */
-  --bg-raised:      #12161C;   /* inputs, cards, control panels     */
-  --bg-overlay:     #1B2028;   /* hover bg, selected rows           */
-  --bg-border:      rgba(180, 200, 224, 0.10); /* steel hairline    */
+  /* === INTERFORGE BRAND — space-black + steel + blue "wave" accent ===
+     Palette: #0B0F14 #1A1F26 #2A3340 #5EA9FF #E6E9EE.  Structure is steel,
+     active/accent surfaces ride the blue (#5EA9FF) via the token names below. */
 
-  /* --- Steel: brushed silver structure --- */
-  --steel-deep:     #070809;
-  --steel-mid:      #10141A;
-  --steel-surface:  #171C23;
-  --steel-edge:     #2C333E;   /* raised edge, steel border         */
+  /* --- Backgrounds: brand space-black --- */
+  --bg-void:        #0B0F14;   /* space black — app floor           */
+  --bg-base:        #12171E;   /* top bar, panels                   */
+  --bg-raised:      #1A1F26;   /* inputs, cards, control panels     */
+  --bg-overlay:     #232C38;   /* hover bg, selected rows           */
+  --bg-border:      rgba(94, 169, 255, 0.12); /* blue-tinted hairline */
+
+  /* --- Steel: brushed structure --- */
+  --steel-deep:     #0B0F14;
+  --steel-mid:      #151A21;
+  --steel-surface:  #1A1F26;
+  --steel-edge:     #2A3340;   /* raised edge, steel border         */
   --steel-shine:    #AEB9C6;   /* silver text, inactive icons       */
-  --steel-silver:   rgba(174, 190, 212, 0.12); /* hairline sheen    */
+  --steel-silver:   rgba(174, 190, 212, 0.10);
 
-  /* --- Active Steel (was "yellow"): borders, active states --- */
-  --yellow-dim:     rgba(200, 216, 236, 0.07); /* ambient sheen bg  */
-  --yellow-core:    #7E8B9C;   /* borders, active tab underline     */
-  --yellow-bright:  #DCE6F2;   /* text, icons on active states      */
-  --yellow-glow:    #EEF4FB;   /* focus rings, peak brightness      */
+  /* --- Accent → brand blue #5EA9FF (borders, active states) --- */
+  --yellow-dim:     rgba(94, 169, 255, 0.10);
+  --yellow-core:    #3D7DD6;   /* blue borders, active underline    */
+  --yellow-bright:  #5EA9FF;   /* blue text/icons on active states  */
+  --yellow-glow:    #8FC5FF;   /* focus rings, peak brightness      */
 
-  /* --- CTA Steel (was "ember"): buttons, generate, lock --- */
-  --ember-dim:      rgba(150, 170, 194, 0.08);
-  --ember-core:     #9DABBB;   /* CTA buttons, lock, generate       */
-  --ember-bright:   #C4D0DD;   /* hover brighten                    */
-  --ember-glow:     rgba(174, 190, 212, 0.28);
+  /* --- CTA → brand blue (buttons, generate, lock) --- */
+  --ember-dim:      rgba(94, 169, 255, 0.08);
+  --ember-core:     #5EA9FF;
+  --ember-bright:   #7FB8FF;
+  --ember-glow:     rgba(94, 169, 255, 0.30);
 
-  /* --- The Steel Gradient: brand signature — polished sheen --- */
-  --forge-gradient:      linear-gradient(135deg, #E6EDF5, #93A1B2);
-  --forge-gradient-h:    linear-gradient(90deg,  #E6EDF5, #93A1B2);
-  --forge-glow-bg:       linear-gradient(135deg, rgba(200,216,236,0.12), rgba(140,158,180,0.07));
-  --forge-glow-strong:   linear-gradient(135deg, rgba(220,232,246,0.22), rgba(150,168,190,0.14));
+  /* --- The Blue Wave gradient: brand signature --- */
+  --forge-gradient:      linear-gradient(135deg, #7FB8FF, #3D7DD6);
+  --forge-gradient-h:    linear-gradient(90deg,  #7FB8FF, #3D7DD6);
+  --forge-glow-bg:       linear-gradient(135deg, rgba(94,169,255,0.14), rgba(42,51,64,0.10));
+  --forge-glow-strong:   linear-gradient(135deg, rgba(94,169,255,0.26), rgba(61,125,214,0.16));
 
-  /* --- Text: cool whites and grays --- */
-  --text-primary:   #EAEEF4;   /* cool near-white                   */
-  --text-secondary: #8994A2;   /* cool mid-gray                     */
-  --text-muted:     #454C57;   /* cool dark-gray, disabled          */
-  --text-inverse:   #080A0D;   /* dark text on steel surfaces       */
+  /* --- Text: brand near-white + cool grays --- */
+  --text-primary:   #E6E9EE;   /* brand near-white                  */
+  --text-secondary: #8A94A3;   /* cool mid-gray                     */
+  --text-muted:     #4A5361;   /* cool dark-gray, disabled          */
+  --text-inverse:   #0B0F14;   /* dark text on bright accents       */
 
   /* --- Status colours --- */
   --status-success: #2ecc71;
@@ -91,7 +95,7 @@
   --radius-full: 9999px;
 
   /* --- Typography --- */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   --text-xs:   11px;
@@ -106,10 +110,10 @@
   --shadow-sm:            0 1px 4px rgba(0, 0, 0, 0.75);
   --shadow-md:            0 4px 20px rgba(0, 0, 0, 0.80);
   --shadow-lg:            0 8px 40px rgba(0, 0, 0, 0.90);
-  --shadow-yellow:        0 0 20px rgba(200, 216, 236, 0.22);
-  --shadow-yellow-strong: 0 0 40px rgba(220, 232, 246, 0.40);
-  --shadow-ember:         0 0 24px rgba(150, 168, 190, 0.28);
-  --shadow-forge:         0 0 28px rgba(200, 216, 236, 0.16), 0 0 64px rgba(140, 158, 180, 0.10);
+  --shadow-yellow:        0 0 20px rgba(94, 169, 255, 0.30);
+  --shadow-yellow-strong: 0 0 40px rgba(94, 169, 255, 0.50);
+  --shadow-ember:         0 0 24px rgba(94, 169, 255, 0.32);
+  --shadow-forge:         0 0 28px rgba(94, 169, 255, 0.20), 0 0 64px rgba(61, 125, 214, 0.12);
 
   /* --- Transitions --- */
   --transition-fast:   120ms ease;
@@ -192,16 +196,16 @@ p, span, input, textarea, [data-selectable] {
 }
 
 @keyframes yellow-pulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(200, 216, 236, 0.3); }
-  50%       { box-shadow: 0 0 24px rgba(200, 216, 236, 0.6); }
+  0%, 100% { box-shadow: 0 0 8px rgba(94, 169, 255, 0.35); }
+  50%       { box-shadow: 0 0 24px rgba(94, 169, 255, 0.65); }
 }
 
 @keyframes forge-pulse {
   0%, 100% {
-    box-shadow: 0 0 8px rgba(200, 216, 236, 0.2), 0 0 16px rgba(140, 158, 180, 0.1);
+    box-shadow: 0 0 8px rgba(94, 169, 255, 0.25), 0 0 16px rgba(61, 125, 214, 0.12);
   }
   50% {
-    box-shadow: 0 0 20px rgba(200, 216, 236, 0.45), 0 0 40px rgba(140, 158, 180, 0.25);
+    box-shadow: 0 0 20px rgba(94, 169, 255, 0.5), 0 0 40px rgba(61, 125, 214, 0.28);
   }
 }
 

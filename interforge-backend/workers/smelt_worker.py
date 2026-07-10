@@ -338,7 +338,7 @@ async def run_smelt_sprite_sheet(job: Job, params: dict) -> None:
                             frame_neg,
                             gen_res,             # width
                             gen_res,             # height
-                            30,                  # steps
+                            22,                  # steps (trimmed for the 8GB offload path)
                             7.5,                 # cfg
                             active_ip_scale,
                             controlnet_scale,

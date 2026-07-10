@@ -70,6 +70,19 @@ export default function Smelting({ prospectingData, onLock }: Props) {
     return () => { cancelled = true; };
   }, []);
 
+  /* Sync prompt + type from a newly locked Prospect. Needed because this page
+     stays mounted (state persistence), so the initial useState(sourcePrompt)
+     doesn't re-run when a Prospect is locked after the page first mounted. */
+  const lastProspectId = useRef<string | null>(null);
+  useEffect(() => {
+    const pid = prospectingData?.prospectJobId ?? null;
+    if (pid && pid !== lastProspectId.current) {
+      lastProspectId.current = pid;
+      if (prospectingData?.prompt) setPrompt(prospectingData.prompt);
+      if (prospectingData?.assetType) setAssetType(prospectingData.assetType);
+    }
+  }, [prospectingData?.prospectJobId, prospectingData?.prompt, prospectingData?.assetType]);
+
   function setPoseViewState(name: string, update: Partial<ViewState>) {
     setPoseViews(prev => ({ ...prev, [name]: { ...(prev[name] ?? IDLE), ...update } }));
   }
@@ -84,7 +97,8 @@ export default function Smelting({ prospectingData, onLock }: Props) {
   const approvedCount = selectedPoses.filter(n => poseViews[n]?.status === "approved").length;
   const totalCount    = selectedPoses.length;
   const allApproved   = totalCount > 0 && approvedCount === totalCount;
-  const canGenerate   = prompt.trim().length > 0 && selectedPoses.length > 0;
+  // In identity mode the IP-Adapter carries the character, so a prompt is optional.
+  const canGenerate   = selectedPoses.length > 0 && (hasProspect || prompt.trim().length > 0);
 
   /* ── Generate all selected poses ─────────────────────────── */
   async function generateAll() {
@@ -99,8 +113,11 @@ export default function Smelting({ prospectingData, onLock }: Props) {
     sseRef.current?.close();
 
     try {
+      // Backend rejects a blank prompt; in identity mode fall back to the
+      // Prospect's prompt (the IP-Adapter still carries the actual character).
+      const effectivePrompt = prompt.trim() || sourcePrompt.trim() || "game character, full body";
       const body: Record<string, unknown> = {
-        prompt,
+        prompt: effectivePrompt,
         asset_type: assetType,
         art_style:  prospectingData?.artStyle ?? "stylized",
         poses:      selectedPoses,
@@ -336,7 +353,9 @@ export default function Smelting({ prospectingData, onLock }: Props) {
         {/* Footer */}
         <div className="smelt__panel-footer">
           {!canGenerate && (
-            <div className="smelt__no-prospect-hint">Enter a prompt and pick at least one pose</div>
+            <div className="smelt__no-prospect-hint">
+              {hasProspect ? "Pick at least one pose" : "Enter a prompt and pick at least one pose"}
+            </div>
           )}
           {anyGenerating && genProgress && (
             <div className="smelt__gen-progress">{genProgress}</div>
