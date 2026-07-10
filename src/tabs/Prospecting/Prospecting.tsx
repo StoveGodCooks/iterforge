@@ -3,6 +3,8 @@ import { save, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import "./Prospecting.css";
 import AnvilWorkspace from "../../components/Anvil/AnvilWorkspace";
+import LogoBadge3D from "../../components/MeshViewer/LogoBadge3D";
+import ifLogoGlb from "../../assets/if-logo.glb?url";
 import { useAssetTray } from "../../contexts/AssetTrayContext";
 import type { ProspectingOutput, AssetType, ArtStyle, ReconstructionPath } from "../../types/pipeline";
 
@@ -876,21 +878,14 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
               {/* Glow bloom */}
               <div style={{
                 position: "absolute", inset: "-48px",
-                background: "radial-gradient(circle, rgba(214,140,32,0.22) 0%, transparent 65%)",
+                background: "radial-gradient(circle, rgba(94,169,255,0.22) 0%, transparent 65%)",
                 filter: "blur(16px)",
                 pointerEvents: "none",
               }} />
-              {/* Crossed hammers — yellow, glowing */}
-              <span style={{
-                fontSize: 72,
-                lineHeight: 1,
-                display: "block",
-                position: "relative",
-                filter: "drop-shadow(0 0 16px rgba(214,140,32,0.7)) drop-shadow(0 0 4px rgba(201,79,26,0.5))",
-                color: "var(--yellow-bright)",
-              }}>
-                ⚒
-              </span>
+              {/* Animated 3D InterForge logo */}
+              <div style={{ position: "relative" }}>
+                <LogoBadge3D glbUrl={ifLogoGlb} size={160} />
+              </div>
             </div>
             <p style={{ margin: 0, fontSize: "var(--text-md)", color: "var(--text-primary)", fontWeight: 600, letterSpacing: "0.01em" }}>
               Describe your asset — strike Generate.
@@ -901,9 +896,9 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
             <button
               style={{
                 marginTop: 20, padding: "8px 18px",
-                border: "1px solid rgba(214,140,32,0.25)",
+                border: "1px solid rgba(94,169,255,0.25)",
                 borderRadius: "var(--radius-full)",
-                background: "rgba(214,140,32,0.07)",
+                background: "rgba(94,169,255,0.07)",
                 color: "var(--yellow-bright)",
                 fontSize: "var(--text-xs)", fontWeight: 700,
                 letterSpacing: "0.06em", textTransform: "uppercase",

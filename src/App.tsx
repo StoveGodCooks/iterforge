@@ -5,6 +5,7 @@ import "./styles/setup.css";
 
 import { PipelineProvider, usePipeline } from "./contexts/PipelineContext";
 import { AssetTrayProvider } from "./contexts/AssetTrayContext";
+import { AnvilBoardProvider } from "./contexts/AnvilBoardContext";
 import { ContextMenuProvider } from "./shell/ContextMenu";
 import { ProjectsProvider } from "./components/Projects/ProjectsContext";
 
@@ -176,9 +177,11 @@ export default function App() {
     <PipelineProvider>
       <ProjectsProvider>
         <AssetTrayProvider>
-          <ContextMenuProvider>
-            <AppShell />
-          </ContextMenuProvider>
+          <AnvilBoardProvider>
+            <ContextMenuProvider>
+              <AppShell />
+            </ContextMenuProvider>
+          </AnvilBoardProvider>
         </AssetTrayProvider>
       </ProjectsProvider>
     </PipelineProvider>

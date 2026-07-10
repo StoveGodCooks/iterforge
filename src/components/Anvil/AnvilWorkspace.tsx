@@ -27,6 +27,8 @@ type StickerPreset = "arrow" | "star" | "crosshair" | "tag";
 interface Props {
   onClose?: () => void;
   embedded?: boolean;
+  seedImage?: string | null;                              // draw as the starting underlay
+  onSave?: (bytes: Uint8Array) => void | Promise<void>;   // hand the finished drawing to a parent
 }
 
 const CANVAS_WIDTH = 1400;
@@ -66,7 +68,7 @@ const TOOL_ICON_PATHS: Record<Tool, string> = {
   sticker:         "M12 2 L14.5 9.5 H22 L16 14 L18.5 21.5 L12 17 L5.5 21.5 L8 14 L2 9.5 H9.5 Z",
 };
 
-export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
+export default function AnvilWorkspace({ onClose, embedded = false, seedImage = null, onSave }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isDrawingRef = useRef(false);
@@ -97,6 +99,33 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
     redoRef.current = [];
     setHistoryTick((version) => version + 1);
   }, []);
+
+  // Draw a seed image (e.g. the panel's current picture) as the starting underlay.
+  useEffect(() => {
+    if (!seedImage) return;
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => {
+      const ctx = getContext();
+      if (!ctx) return;
+      const margin = 40;
+      const scale = Math.min(
+        (CANVAS_WIDTH - margin * 2) / image.width,
+        (CANVAS_HEIGHT - margin * 2) / image.height,
+        1,
+      );
+      const dw = image.width * scale;
+      const dh = image.height * scale;
+      ctx.save();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.drawImage(image, (CANVAS_WIDTH - dw) / 2, (CANVAS_HEIGHT - dh) / 2, dw, dh);
+      ctx.restore();
+      pushSnapshot();
+      setStatus("Loaded panel image as underlay");
+    };
+    image.src = seedImage;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedImage]);
 
   const toolLabels: Record<Tool, string> = {
     brush: "Brush",
@@ -558,6 +587,19 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
     setStatus("Board exported as PNG.");
   }
 
+  async function saveToPanel() {
+    const canvas = canvasRef.current;
+    if (!canvas || !onSave) return;
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) { setStatus("Save failed."); return; }
+    try {
+      await onSave(new Uint8Array(await blob.arrayBuffer()));
+      setStatus("Saved to panel.");
+    } catch {
+      setStatus("Save failed — the panel image may be cross-origin.");
+    }
+  }
+
   return (
     <div className={`anvil-shell ${embedded ? "anvil-shell--embedded" : ""}`}>
       {!embedded && <div className="anvil-shell__scrim" onClick={onClose} />}
@@ -571,7 +613,10 @@ export default function AnvilWorkspace({ onClose, embedded = false }: Props) {
             <button className="anvil-shell__action" onClick={redo} disabled={!canRedo} title="Redo">↪ Redo</button>
             <button className="anvil-shell__action" onClick={openImportDialog} title="Import reference image">Import Ref</button>
             <button className="anvil-shell__action" onClick={clearBoard} title="Clear board">Clear</button>
-            <button className="anvil-shell__action anvil-shell__action--primary" onClick={exportPng}>Export PNG</button>
+            {onSave && (
+              <button className="anvil-shell__action anvil-shell__action--primary" onClick={saveToPanel} title="Save this drawing back to the panel">Save to Panel</button>
+            )}
+            <button className={`anvil-shell__action${onSave ? "" : " anvil-shell__action--primary"}`} onClick={exportPng}>Export PNG</button>
             {onClose && (
               <button className="anvil-shell__close" onClick={onClose}>{embedded ? "Back" : "Close"}</button>
             )}

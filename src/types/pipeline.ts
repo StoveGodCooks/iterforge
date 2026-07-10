@@ -118,6 +118,21 @@ export interface LoraSelection {
   weight: number;
 }
 
+/** One comic panel in the Anvil Sketch Board. */
+export interface AnvilPanel {
+  id:        string;
+  imageSrc:  string | null;   // display URL (convertFileSrc / outputs URL) or null
+  imagePath: string | null;   // real filesystem path — used as an img2img reference
+  caption:   string;
+}
+
+/** The Anvil Sketch Board: a comic-style storyboard. */
+export interface AnvilBoard {
+  title:  string;
+  story:  string;
+  panels: AnvilPanel[];
+}
+
 export interface ProspectingOutput {
   /* Core image data */
   imagePath: string;           // original generated RGB image
