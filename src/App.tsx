@@ -134,10 +134,10 @@ function AppShell() {
         <div className="content-wrap">
           <main className="workspace">
             <ErrorBoundary>
-              {/* Prospect + Forge stay mounted (display toggle) so their generated
-                  art / meshes survive navigation. Smelt/Projects/DevTools remount. */}
+              {/* Prospect + Pose + Forge stay mounted (display toggle) so their generated
+                  art / frames / meshes survive navigation. Projects/DevTools remount. */}
               <div style={{ display: activeView === "prospect" ? "contents" : "none" }}><ProspectStage /></div>
-              {activeView === "smelt" && <SmeltStage />}
+              <div style={{ display: activeView === "smelt" ? "contents" : "none" }}><SmeltStage /></div>
               <div style={{ display: activeView === "forge" ? "contents" : "none" }}><ForgeStage /></div>
               {activeView === "projects" && <ProjectsShell />}
               {activeView === "devtools" && devToolsEnabled && <DevTools />}
