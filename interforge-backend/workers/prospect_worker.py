@@ -17,7 +17,7 @@ from core.job_manager import Job, JobStatus
 from core.sse import (
     EventType, make_event, progress_event, done_event, error_event, log_event,
 )
-from masterforge.asset_configs import get_config
+from masterforge.asset_configs import get_config, normalize_asset_type
 from masterforge.negative_prompts import get_negative
 from masterforge.lighting_presets import get_lighting_tokens
 from masterforge.style_modifiers import apply_style
@@ -35,7 +35,7 @@ async def run_prospect(job: Job, params: dict) -> None:
 
     profiler = PipelineProfiler(job_id=job.id, route="PROSPECT")
 
-    asset_type = params.get("asset_type", "prop")
+    asset_type = normalize_asset_type(params.get("asset_type", "prop"))
     art_style  = params.get("art_style",  "stylized")
     cfg_obj    = get_config(asset_type)
     prompt     = params["prompt"]

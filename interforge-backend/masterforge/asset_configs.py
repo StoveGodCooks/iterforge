@@ -269,6 +269,27 @@ ASSET_CONFIGS: dict[str, AssetConfig] = {
 }
 
 
+# Frontend asset-type ids that don't match the canonical backend keys.
+# Normalizing once at the entry point fixes templates, configs, negatives,
+# and lighting together (they all share these keys).
+ASSET_TYPE_ALIASES: dict[str, str] = {
+    "concept":    "concept_art",
+    "tileset":    "tileable_texture",
+    "vfx":        "vfx_element",
+    "ui":         "ui_icon",
+    "background": "skybox",
+    "animal":     "creature",   # organic subject
+    "shield":     "prop",       # single handheld object
+    "portrait":   "concept_art",# 2D face/bust art — no 3D isolation framing
+}
+
+
+def normalize_asset_type(asset_type: str) -> str:
+    """Map a frontend asset-type id to its canonical backend key."""
+    key = (asset_type or "").strip().lower()
+    return ASSET_TYPE_ALIASES.get(key, key)
+
+
 def get_config(asset_type: str) -> AssetConfig:
     """Returns the AssetConfig for the given type, defaulting to 'prop'."""
     return ASSET_CONFIGS.get(asset_type, ASSET_CONFIGS["prop"])
