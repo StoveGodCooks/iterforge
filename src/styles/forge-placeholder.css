@@ -39,9 +39,9 @@
   font-weight: 700;
   padding: 4px 12px;
   border-radius: var(--radius-full);
-  background: rgba(240, 184, 40, 0.12);
+  background: rgba(200, 216, 236, 0.12);
   color: var(--yellow-core);
-  border: 1px solid rgba(240, 184, 40, 0.2);
+  border: 1px solid rgba(200, 216, 236, 0.2);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }

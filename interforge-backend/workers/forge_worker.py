@@ -55,6 +55,12 @@ async def run_forge(job: Job, params: dict) -> None:
             view_rgba_paths[angle] = p
         await job.push(log_event("Forge pipeline starting — route: NONE (2D asset)"))
         await _run_none(job, params, view_rgba_paths, out_dir)
+    elif recon_path == "relief":
+        await job.push(log_event("Forge pipeline starting — route: 2.5D RELIEF (depth mesh)"))
+        await _run_relief(job, params, out_dir, export_fmt, profiler)
+    elif recon_path == "extrude":
+        await job.push(log_event("Forge pipeline starting — route: 2D FLAT (billboard)"))
+        await _run_extrude(job, params, out_dir, export_fmt, profiler)
     else:
         await job.push(log_event(
             "Forge pipeline starting — route: SF3D (single image → textured mesh)"
@@ -308,3 +314,217 @@ def _step_save_project(
     project_json = out_dir / "project.json"
     project_json.write_text(json.dumps(project, indent=2, ensure_ascii=False))
     return project_json
+
+
+# ══════════════════════════════════════════════════════════════
+#  2D MESH routes — 2.5D depth relief / 2D flat billboard
+# ══════════════════════════════════════════════════════════════
+
+def _resolve_prospect_src(params: dict) -> "Path | None":
+    """Locate the locked prospect RGBA image (falls back to a smelt front frame)."""
+    prospect_job_id = (params.get("prospect_job_id") or "").strip()
+    image_index     = int(params.get("image_index", 0))
+    smelt_job_id    = (params.get("smelt_job_id") or "").strip()
+    if prospect_job_id:
+        pdir = PROJECTS_ROOT / prospect_job_id / "prospect"
+        for cand in (pdir / f"image_{image_index:02d}_rgba.png",
+                     pdir / f"image_{image_index:02d}.png"):
+            if cand.exists():
+                return cand
+    if smelt_job_id:
+        sdir = PROJECTS_ROOT / smelt_job_id / "smelt" / "front"
+        for cand in (sdir / "image_00_rgba.png", sdir / "image_00.png"):
+            if cand.exists():
+                return cand
+    return None
+
+
+def _load_rgba(src: "Path"):
+    """Load an image as a uint8 (H, W, 4) RGBA numpy array."""
+    import numpy as np
+    from PIL import Image
+    img = Image.open(str(src)).convert("RGBA")
+    return np.asarray(img, dtype=np.uint8)
+
+
+def _build_extrude_mesh(rgba):
+    """2D flat: a textured billboard quad sized to the image aspect ratio."""
+    import numpy as np
+    import trimesh
+    from PIL import Image
+    h, w = rgba.shape[:2]
+    m = float(max(w, h))
+    hw, hh = (w / m) / 2.0, (h / m) / 2.0
+    verts = np.array([[-hw, -hh, 0.0], [hw, -hh, 0.0],
+                      [hw, hh, 0.0], [-hw, hh, 0.0]], dtype=np.float32)
+    faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int64)
+    uv    = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=np.float32)
+    tex = Image.fromarray(rgba, "RGBA")
+    # alphaMode MASK so transparent (RGB=black) background texels are discarded
+    # instead of rendering as solid black; double-sided so the plane shows both ways.
+    material = trimesh.visual.material.PBRMaterial(
+        baseColorTexture=tex, alphaMode="MASK", alphaCutoff=0.5, doubleSided=True,
+    )
+    visual = trimesh.visual.TextureVisuals(uv=uv, material=material)
+    return trimesh.Trimesh(vertices=verts, faces=faces, visual=visual, process=False)
+
+
+def _build_relief_mesh(rgba, depth, grid_max: int = 160, relief: float = 0.22):
+    """2.5D relief: a subdivided plane displaced by depth, background dropped, image-textured."""
+    import numpy as np
+    import trimesh
+    from PIL import Image
+    H, W = depth.shape
+    m = float(max(W, H))
+    gw = int(max(2, min(grid_max, W)))
+    gh = int(max(2, min(grid_max, H)))
+    xs = np.linspace(0, W - 1, gw).astype(int)
+    ys = np.linspace(0, H - 1, gh).astype(int)
+    dg = depth[np.ix_(ys, xs)]                       # (gh, gw)
+    ag = rgba[np.ix_(ys, xs)][:, :, 3]               # alpha grid (gh, gw)
+
+    # vertex positions — centered, +Y up (image row 0 = top)
+    gx = (xs / m) - (W / m) / 2.0
+    gy = (H / m) / 2.0 - (ys / m)
+    verts = np.zeros((gh, gw, 3), dtype=np.float32)
+    verts[:, :, 0] = gx[None, :]
+    verts[:, :, 1] = gy[:, None]
+    verts[:, :, 2] = dg * float(relief)
+    verts = verts.reshape(-1, 3)
+
+    # UVs — glTF (0,0) bottom-left, so flip V
+    u = xs / float(W - 1)
+    v = 1.0 - (ys / float(H - 1))
+    uv = np.zeros((gh, gw, 2), dtype=np.float32)
+    uv[:, :, 0] = u[None, :]
+    uv[:, :, 1] = v[:, None]
+    uv = uv.reshape(-1, 2)
+
+    def vid(r, c):
+        return r * gw + c
+
+    faces = []
+    for r in range(gh - 1):
+        for c in range(gw - 1):
+            avg_a = (int(ag[r, c]) + int(ag[r, c + 1]) +
+                     int(ag[r + 1, c]) + int(ag[r + 1, c + 1])) / 4.0
+            if avg_a < 128:                          # drop background quads
+                continue
+            faces.append([vid(r, c), vid(r + 1, c), vid(r + 1, c + 1)])
+            faces.append([vid(r, c), vid(r + 1, c + 1), vid(r, c + 1)])
+
+    if not faces:                                    # fully masked → keep the full grid
+        for r in range(gh - 1):
+            for c in range(gw - 1):
+                faces.append([vid(r, c), vid(r + 1, c), vid(r + 1, c + 1)])
+                faces.append([vid(r, c), vid(r + 1, c + 1), vid(r, c + 1)])
+
+    faces = np.array(faces, dtype=np.int64)
+    tex = Image.fromarray(rgba, "RGBA")
+    # alphaMode MASK so transparent (RGB=black) background texels are discarded
+    # instead of rendering as solid black; double-sided so the plane shows both ways.
+    material = trimesh.visual.material.PBRMaterial(
+        baseColorTexture=tex, alphaMode="MASK", alphaCutoff=0.5, doubleSided=True,
+    )
+    visual = trimesh.visual.TextureVisuals(uv=uv, material=material)
+    mesh = trimesh.Trimesh(vertices=verts, faces=faces, visual=visual, process=False)
+    mesh.remove_unreferenced_vertices()
+    return mesh
+
+
+async def _finish_2d_mesh(job, mesh, out_dir, params, profiler, pipeline_name: str) -> None:
+    """Shared tail for the 2D-mesh routes: fast-pass 3D post-steps, export GLB, save, done."""
+    await job.push(step_active_event("decimate", "2D mesh — external decimation skipped"))
+    await job.push(step_done_event("decimate", f"{len(mesh.faces):,} faces"))
+    await job.push(step_active_event("refine", "2D mesh — refinement skipped"))
+    await job.push(step_done_event("refine", "Skipped"))
+    await job.push(step_active_event("lod", "LOD skipped to preserve texture"))
+    await job.push(step_done_event("lod", "LOD0 only"))
+    lod_paths: dict[str, str] = {}
+
+    await job.push(step_active_event("export", "Packaging UV-textured GLB"))
+    export_path = out_dir / "asset.glb"
+    try:
+        with profiler.section("export", "Textured GLB export"):
+            await asyncio.to_thread(lambda: mesh.export(str(export_path), include_normals=True))
+        rel      = export_path.relative_to(PROJECTS_ROOT)
+        mesh_url = f"{OUTPUTS_URL}/{rel.as_posix()}"
+        await job.push(step_done_event("export", export_path.name))
+        await job.push(make_event(EventType.MESH_READY, {"mesh_url": mesh_url, "format": "glb"}))
+    except Exception as exc:
+        await job.push(error_event("ERROR_FORGE_EXPORT", str(exc)))
+        profiler.export(out_dir)
+        return
+
+    await job.push(step_active_event("save", "Writing project manifest"))
+    try:
+        with profiler.section("save", "project.json manifest"):
+            await asyncio.to_thread(_step_save_project, job.id, out_dir, export_path, lod_paths, params)
+        await job.push(step_done_event("save", "project.json"))
+    except Exception as exc:
+        await job.push(log_event(f"Project save warning (non-fatal): {exc}"))
+
+    try:
+        profiler.export(out_dir)
+    except Exception:
+        pass
+
+    rel = export_path.relative_to(PROJECTS_ROOT)
+    job.result = {
+        "mesh_url":      f"{OUTPUTS_URL}/{rel.as_posix()}",
+        "export_format": "glb",
+        "lod_paths":     lod_paths,
+        "out_dir":       str(out_dir),
+        "pipeline":      pipeline_name,
+    }
+    await job.push(done_event(job.result))
+
+
+async def _run_relief(job, params, out_dir, export_fmt, profiler) -> None:
+    """2.5D depth relief — locked image -> DepthAnything depth -> displaced textured plane."""
+    src = _resolve_prospect_src(params)
+    if src is None:
+        await job.push(error_event("ERROR_FORGE_NO_SOURCE",
+                                   "Lock a Prospect image before forging a 2D mesh."))
+        profiler.export(out_dir)
+        return
+
+    await job.push(step_active_event("build", "Depth relief - estimating depth + displacing plane"))
+    try:
+        await asyncio.to_thread(_free_other_gpu_engines)     # arbiter: free SDXL first
+        rgba = _load_rgba(src)
+        with profiler.section("build", "DepthAnything + relief mesh"):
+            from inference.depth import estimate_depth, unload as unload_depth
+            depth = await asyncio.to_thread(estimate_depth, rgba, True, True)
+            mesh  = await asyncio.to_thread(_build_relief_mesh, rgba, depth)
+            await asyncio.to_thread(unload_depth)
+        await job.push(step_done_event("build", f"{len(mesh.faces):,} faces (2.5D relief)"))
+    except Exception as exc:
+        await job.push(error_event("ERROR_FORGE_RELIEF", f"Relief generation failed: {exc}"))
+        profiler.export(out_dir)
+        return
+
+    await _finish_2d_mesh(job, mesh, out_dir, params, profiler, "relief")
+
+
+async def _run_extrude(job, params, out_dir, export_fmt, profiler) -> None:
+    """2D flat - locked image -> textured billboard quad (no depth model)."""
+    src = _resolve_prospect_src(params)
+    if src is None:
+        await job.push(error_event("ERROR_FORGE_NO_SOURCE",
+                                   "Lock a Prospect image before forging a 2D mesh."))
+        profiler.export(out_dir)
+        return
+
+    await job.push(step_active_event("build", "2D flat - building textured billboard"))
+    try:
+        rgba = _load_rgba(src)
+        with profiler.section("build", "Billboard quad"):
+            mesh = await asyncio.to_thread(_build_extrude_mesh, rgba)
+        await job.push(step_done_event("build", f"{len(mesh.faces):,} faces (2D flat)"))
+    except Exception as exc:
+        await job.push(error_event("ERROR_FORGE_EXTRUDE", f"2D flat generation failed: {exc}"))
+        profiler.export(out_dir)
+        return
+
+    await _finish_2d_mesh(job, mesh, out_dir, params, profiler, "extrude")

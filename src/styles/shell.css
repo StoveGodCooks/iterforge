@@ -91,7 +91,7 @@
 .rail__btn.active {
   color: var(--yellow-bright);
   background: var(--forge-glow-bg);
-  border-color: rgba(240, 184, 40, 0.20);
+  border-color: rgba(200, 216, 236, 0.20);
 }
 
 .rail__btn.active::before {
@@ -104,7 +104,7 @@
   height: 22px;
   border-radius: 0 3px 3px 0;
   background: var(--forge-gradient);
-  box-shadow: 0 0 8px rgba(240, 184, 40, 0.5);
+  box-shadow: 0 0 8px rgba(200, 216, 236, 0.5);
 }
 
 .rail__spacer {
@@ -172,7 +172,7 @@
   border-radius: 20px;
   background: var(--forge-glow-bg);
   color: var(--yellow-bright);
-  border: 1px solid rgba(240, 184, 40, 0.25);
+  border: 1px solid rgba(200, 216, 236, 0.25);
   -webkit-app-region: no-drag;
 }
 
@@ -192,7 +192,7 @@
 }
 
 .header__btn:hover {
-  border-color: rgba(240, 184, 40, 0.35);
+  border-color: rgba(200, 216, 236, 0.35);
   color: var(--yellow-bright);
   background: var(--yellow-dim);
 }

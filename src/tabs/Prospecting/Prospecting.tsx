@@ -3,6 +3,7 @@ import { save, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import "./Prospecting.css";
 import AnvilWorkspace from "../../components/Anvil/AnvilWorkspace";
+import { useAssetTray } from "../../contexts/AssetTrayContext";
 import type { ProspectingOutput, AssetType, ArtStyle, ReconstructionPath } from "../../types/pipeline";
 
 const BACKEND = "http://127.0.0.1:7842";
@@ -138,6 +139,8 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
   const [img2imgPath, setImg2imgPath] = useState<string | null>(null);
   const [denoise,    setDenoise]    = useState(0.75);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { addItem: addToTray } = useAssetTray();
 
   /* Output gallery */
   const [images,     setImages]     = useState<string[]>([]);
@@ -332,6 +335,14 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
           const next = [...prev];
           next[idx]  = imageUrl;
           return next;
+        });
+        addToTray({
+          src: imageUrl,
+          thumbnailSrc: imageUrl,
+          label: `Concept ${idx + 1}`,
+          sourceStage: "prospect",
+          sourceJobId: jobId,
+          tags: [],
         });
         setImageMeta(prev => ({
           ...prev,

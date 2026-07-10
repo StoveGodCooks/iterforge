@@ -124,11 +124,11 @@ def apply_style(
             "prompt": user_prompt,
         }
 
-    # Build full positive prompt: prefix + user + suffix
-    parts = []
+    # Keep the user's subject leading (build_templated_prompt already put it
+    # first); style cues go after so they don't outweigh the subject.
+    parts = [user_prompt.strip()]
     if mod.prompt_prefix:
         parts.append(mod.prompt_prefix.rstrip(",").strip())
-    parts.append(user_prompt.strip())
     if mod.prompt_suffix:
         parts.append(mod.prompt_suffix.strip())
     full_prompt = ", ".join(p for p in parts if p)

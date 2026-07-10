@@ -83,7 +83,7 @@
   background: var(--bg-overlay);
 }
 .anvil-layer.active {
-  background: rgba(240, 184, 40, 0.12);
+  background: rgba(200, 216, 236, 0.12);
   color: var(--yellow-core);
 }
 

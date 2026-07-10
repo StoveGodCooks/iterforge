@@ -15,52 +15,55 @@
 
   /* ----------------------------------------------------------------
      FORGE FIRE — Option B color system
-     Yellow (#F0B828) = creation, prompt, active states   — the "I"
-     Orange (#E8621A) = action, heat, commitment          — the "F"
+     Yellow (#DCE6F2) = creation, prompt, active states   — the "I"
+     Orange (#9DABBB) = action, heat, commitment          — the "F"
      Gradient between them = brand signature moment
      Silver                = steel structure, inactive
      Black (#0E0C0A)       = the forge floor everything sits on
      ---------------------------------------------------------------- */
 
-  /* --- Backgrounds: warm-tinted forge blacks --- */
-  --bg-void:        #0E0C0A;   /* forge floor — warm near-black     */
-  --bg-base:        #141210;   /* rail, left panels                 */
-  --bg-raised:      #1C1916;   /* inputs, cards, control panels     */
-  --bg-overlay:     #252018;   /* hover bg, selected rows           */
-  --bg-border:      rgba(255, 255, 255, 0.07); /* hairline only     */
+  /* === BLACK & STEEL THEME ===
+     Space-black backgrounds, brushed/polished steel accents. Token names
+     kept (yellow/ember/forge) so every component recolors from here. */
 
-  /* --- Steel: silver structure — the logo's riveted frame --- */
-  --steel-deep:     #0A0908;
-  --steel-mid:      #181512;
-  --steel-surface:  #201D19;
-  --steel-edge:     #2E2A24;   /* raised edge, subtle border        */
-  --steel-shine:    #8A96A8;   /* silver text, inactive icons       */
-  --steel-silver:   rgba(160, 180, 210, 0.08); /* hairline sheen    */
+  /* --- Backgrounds: deep space-black (cool) --- */
+  --bg-void:        #050608;   /* space black — app floor           */
+  --bg-base:        #0B0E12;   /* top bar, panels                   */
+  --bg-raised:      #12161C;   /* inputs, cards, control panels     */
+  --bg-overlay:     #1B2028;   /* hover bg, selected rows           */
+  --bg-border:      rgba(180, 200, 224, 0.10); /* steel hairline    */
 
-  /* --- Forge Yellow: hot metal — the "I" glyph, creation --- */
-  --yellow-dim:     rgba(240, 184, 40, 0.08);  /* ambient glow bg   */
-  --yellow-core:    #D4920F;   /* borders, active tab underline     */
-  --yellow-bright:  #F0B828;   /* text, icons on active states      */
-  --yellow-glow:    #FFD166;   /* focus rings, peak brightness      */
+  /* --- Steel: brushed silver structure --- */
+  --steel-deep:     #070809;
+  --steel-mid:      #10141A;
+  --steel-surface:  #171C23;
+  --steel-edge:     #2C333E;   /* raised edge, steel border         */
+  --steel-shine:    #AEB9C6;   /* silver text, inactive icons       */
+  --steel-silver:   rgba(174, 190, 212, 0.12); /* hairline sheen    */
 
-  /* --- Ember Orange: strike heat — the "F" glyph, action --- */
-  --ember-dim:      rgba(232, 98, 26, 0.08);   /* ambient glow bg   */
-  --ember-core:     #E8621A;   /* CTA buttons, lock, generate       */
-  --ember-bright:   #F07838;   /* hover brighten                    */
-  --ember-glow:     rgba(232, 98, 26, 0.25);
+  /* --- Active Steel (was "yellow"): borders, active states --- */
+  --yellow-dim:     rgba(200, 216, 236, 0.07); /* ambient sheen bg  */
+  --yellow-core:    #7E8B9C;   /* borders, active tab underline     */
+  --yellow-bright:  #DCE6F2;   /* text, icons on active states      */
+  --yellow-glow:    #EEF4FB;   /* focus rings, peak brightness      */
 
-  /* --- The Forge Gradient: brand signature — used sparingly --- */
-  /* Yellow → Orange: active indicator, CTAs, progress, glows    */
-  --forge-gradient:      linear-gradient(135deg, #F0B828, #E8621A);
-  --forge-gradient-h:    linear-gradient(90deg,  #F0B828, #E8621A);
-  --forge-glow-bg:       linear-gradient(135deg, rgba(240,184,40,0.12), rgba(232,98,26,0.08));
-  --forge-glow-strong:   linear-gradient(135deg, rgba(240,184,40,0.20), rgba(232,98,26,0.14));
+  /* --- CTA Steel (was "ember"): buttons, generate, lock --- */
+  --ember-dim:      rgba(150, 170, 194, 0.08);
+  --ember-core:     #9DABBB;   /* CTA buttons, lock, generate       */
+  --ember-bright:   #C4D0DD;   /* hover brighten                    */
+  --ember-glow:     rgba(174, 190, 212, 0.28);
 
-  /* --- Text: warm-shifted whites and grays --- */
-  --text-primary:   #F0EDE8;   /* warm near-white                   */
-  --text-secondary: #8B8278;   /* warm mid-gray                     */
-  --text-muted:     #4A443E;   /* warm dark-gray, disabled          */
-  --text-inverse:   #0E0C0A;   /* text on bright forge surfaces     */
+  /* --- The Steel Gradient: brand signature — polished sheen --- */
+  --forge-gradient:      linear-gradient(135deg, #E6EDF5, #93A1B2);
+  --forge-gradient-h:    linear-gradient(90deg,  #E6EDF5, #93A1B2);
+  --forge-glow-bg:       linear-gradient(135deg, rgba(200,216,236,0.12), rgba(140,158,180,0.07));
+  --forge-glow-strong:   linear-gradient(135deg, rgba(220,232,246,0.22), rgba(150,168,190,0.14));
+
+  /* --- Text: cool whites and grays --- */
+  --text-primary:   #EAEEF4;   /* cool near-white                   */
+  --text-secondary: #8994A2;   /* cool mid-gray                     */
+  --text-muted:     #454C57;   /* cool dark-gray, disabled          */
+  --text-inverse:   #080A0D;   /* dark text on steel surfaces       */
 
   /* --- Status colours --- */
   --status-success: #2ecc71;
@@ -103,10 +106,10 @@
   --shadow-sm:            0 1px 4px rgba(0, 0, 0, 0.75);
   --shadow-md:            0 4px 20px rgba(0, 0, 0, 0.80);
   --shadow-lg:            0 8px 40px rgba(0, 0, 0, 0.90);
-  --shadow-yellow:        0 0 20px rgba(240, 184, 40, 0.28);
-  --shadow-yellow-strong: 0 0 40px rgba(240, 184, 40, 0.50);
-  --shadow-ember:         0 0 24px rgba(232, 98, 26, 0.32);
-  --shadow-forge:         0 0 32px rgba(240, 184, 40, 0.18), 0 0 64px rgba(232, 98, 26, 0.10);
+  --shadow-yellow:        0 0 20px rgba(200, 216, 236, 0.22);
+  --shadow-yellow-strong: 0 0 40px rgba(220, 232, 246, 0.40);
+  --shadow-ember:         0 0 24px rgba(150, 168, 190, 0.28);
+  --shadow-forge:         0 0 28px rgba(200, 216, 236, 0.16), 0 0 64px rgba(140, 158, 180, 0.10);
 
   /* --- Transitions --- */
   --transition-fast:   120ms ease;
@@ -153,7 +156,7 @@ p, span, input, textarea, [data-selectable] {
 ::-webkit-scrollbar        { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track  { background: transparent; }
 ::-webkit-scrollbar-thumb  { background: rgba(160, 175, 200, 0.14); border-radius: var(--radius-full); }
-::-webkit-scrollbar-thumb:hover { background: rgba(212, 154, 16, 0.4); }
+::-webkit-scrollbar-thumb:hover { background: rgba(200, 216, 236, 0.4); }
 
 /* -- Focus ring (keyboard nav) ------------------------------ */
 :focus-visible {
@@ -189,16 +192,16 @@ p, span, input, textarea, [data-selectable] {
 }
 
 @keyframes yellow-pulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(240, 184, 40, 0.3); }
-  50%       { box-shadow: 0 0 24px rgba(240, 184, 40, 0.6); }
+  0%, 100% { box-shadow: 0 0 8px rgba(200, 216, 236, 0.3); }
+  50%       { box-shadow: 0 0 24px rgba(200, 216, 236, 0.6); }
 }
 
 @keyframes forge-pulse {
   0%, 100% {
-    box-shadow: 0 0 8px rgba(240, 184, 40, 0.2), 0 0 16px rgba(232, 98, 26, 0.1);
+    box-shadow: 0 0 8px rgba(200, 216, 236, 0.2), 0 0 16px rgba(140, 158, 180, 0.1);
   }
   50% {
-    box-shadow: 0 0 20px rgba(240, 184, 40, 0.45), 0 0 40px rgba(232, 98, 26, 0.25);
+    box-shadow: 0 0 20px rgba(200, 216, 236, 0.45), 0 0 40px rgba(140, 158, 180, 0.25);
   }
 }
 

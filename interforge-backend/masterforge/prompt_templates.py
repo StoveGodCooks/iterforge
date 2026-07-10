@@ -123,10 +123,13 @@ def build_templated_prompt(user_prompt: str, asset_type: str) -> str:
     if tmpl is None:
         return user_prompt
 
-    parts = []
+    # Subject FIRST — SDXL weights early tokens most heavily, and CLIP truncates
+    # at 77 tokens. If isolation boilerplate leads, every asset of a type looks
+    # the same and long descriptions get cut. Lead with the user's subject;
+    # isolation + quality cues follow (still present, lower weight, truncated last).
+    parts = [user_prompt.strip()]
     if tmpl.prefix:
         parts.append(tmpl.prefix.rstrip(",").strip())
-    parts.append(user_prompt.strip())
     if tmpl.suffix:
         parts.append(tmpl.suffix.strip())
 

@@ -5,13 +5,15 @@ import { open } from "@tauri-apps/plugin-shell";
 import "../../styles/forge.css";
 import type { ProspectingOutput, SmeltingOutput, ForgeOutput, ExportFormat } from "../../types/pipeline";
 import { ENABLE_3D } from "../../featureFlags";
+import { useAssetTray } from "../../contexts/AssetTrayContext";
 
 const MeshViewer = lazy(() => import("../../components/MeshViewer/MeshViewer"));
 
 const BACKEND = "http://127.0.0.1:7842";
 
 /* ── Local types ─────────────────────────────────────────── */
-type Pipeline  = "mesh" | "sprite" | "2D" | null;
+type Pipeline  = "mesh" | "mesh2d" | "sprite" | "2D" | null;
+type Mesh2DMode = "relief" | "extrude";
 type StepStatus = "pending" | "active" | "done" | "error";
 
 interface MeshStep {
@@ -36,7 +38,7 @@ const INITIAL_STEPS: MeshStep[] = [
   {
     id: "build",
     name: "Build Geometry",
-    desc: "Construct base mesh from multi-view depth data",
+    desc: "Stable Fast 3D — single locked image → UV-textured mesh",
     status: "pending",
     statusText: "Waiting",
   },
@@ -99,6 +101,16 @@ export default function Forge({ smeltingData, prospectingData, onLock }: Props) 
       )}
       {pipeline === "mesh" && (
         <MeshPipeline
+          variant="3d"
+          smeltingData={smeltingData}
+          prospectingData={prospectingData}
+          onBack={() => setPipeline(null)}
+          onLock={onLock}
+        />
+      )}
+      {pipeline === "mesh2d" && (
+        <MeshPipeline
+          variant="2dmesh"
           smeltingData={smeltingData}
           prospectingData={prospectingData}
           onBack={() => setPipeline(null)}
@@ -136,18 +148,17 @@ function PipelinePicker({
 
       <div className="forge-picker__cards">
 
-        {/* ── Mesh card (3D — parked behind ENABLE_3D) ───── */}
-        {ENABLE_3D && (
+        {/* ── 3D Mesh card — Stable Fast 3D (single Prospect image → mesh) ── */}
         <div className="pipeline-card pipeline-card--mesh" onClick={() => onChoose("mesh")}>
           <span className="pipeline-card__icon">🗿</span>
           <span className="pipeline-card__name">3D Mesh</span>
           <p className="pipeline-card__desc">
-            Convert your smelted multi-view images into a game-ready 3D model
-            with UVs, textures, and LODs.
+            Turn your locked Prospect image into a game-ready 3D model —
+            UV-unwrapped and textured — with Stable Fast 3D.
           </p>
           <div className="pipeline-card__steps">
-            {["Build Geometry", "Decimation", "Refine",
-              "LOD Generation", "Export GLB / FBX", "UV + Texture (v2)"].map(s => (
+            {["Build (SF3D)", "Decimation", "Refine",
+              "LOD Generation", "Export GLB / FBX", "Save Project"].map(s => (
               <span key={s} className="pipeline-card__step">
                 <span className="pipeline-card__step-dot" />
                 {s}
@@ -156,7 +167,26 @@ function PipelinePicker({
           </div>
           <button className="pipeline-card__cta">Enter Mesh Pipeline →</button>
         </div>
-        )}
+
+        {/* ── 2D Mesh card — depth relief (2.5D) / flat extrude (2D) ── */}
+        <div className="pipeline-card pipeline-card--mesh" onClick={() => onChoose("mesh2d")}>
+          <span className="pipeline-card__icon">🪧</span>
+          <span className="pipeline-card__name">2D Mesh</span>
+          <p className="pipeline-card__desc">
+            Give a 2D asset real geometry — a depth <strong>relief (2.5D)</strong> that
+            catches light, or a flat <strong>extrude</strong> billboard.
+          </p>
+          <div className="pipeline-card__steps">
+            {["2.5D Relief (depth)", "or 2D Flat (extrude)",
+              "Texture map", "Export GLB / FBX", "Save Project"].map(s => (
+              <span key={s} className="pipeline-card__step">
+                <span className="pipeline-card__step-dot" />
+                {s}
+              </span>
+            ))}
+          </div>
+          <button className="pipeline-card__cta">Enter 2D Mesh Pipeline →</button>
+        </div>
 
         {/* ── 3D-view Sprite card (3D — parked behind ENABLE_3D) ── */}
         {ENABLE_3D && (
@@ -208,13 +238,17 @@ function PipelinePicker({
    MESH PIPELINE
    ============================================================ */
 interface MeshPipelineProps {
+  variant?: "3d" | "2dmesh";
   smeltingData: SmeltingOutput | null;
   prospectingData: ProspectingOutput | null;
   onBack: () => void;
   onLock?: (data: ForgeOutput) => void;
 }
 
-function MeshPipeline({ smeltingData, prospectingData, onBack, onLock }: MeshPipelineProps) {
+function MeshPipeline({ variant = "3d", smeltingData, prospectingData, onBack, onLock }: MeshPipelineProps) {
+  const is2DMesh = variant === "2dmesh";
+  const [mesh2dMode, setMesh2dMode] = useState<Mesh2DMode>("relief");
+  const { addItem: addToTray } = useAssetTray();
   const [steps,       setSteps]       = useState<MeshStep[]>(INITIAL_STEPS);
   const [running,     setRunning]     = useState(false);
   const [done,        setDone]        = useState(false);
@@ -245,10 +279,10 @@ function MeshPipeline({ smeltingData, prospectingData, onBack, onLock }: MeshPip
   const ASSET_2D_ONLY = ["concept", "environment", "tileset", "vfx", "ui"];
   const is2DOnly = ASSET_2D_ONLY.includes(prospectingData?.assetType ?? "");
 
-  /* canRun: organic route needs smelt views (6-view multi-view reconstruction) */
+  /* SF3D builds the mesh from the single locked Prospect image — no smelt needed. */
   const smeltJobId = smeltingData?.smeltJobId ?? null;
   const hasSmeltJobs = !!smeltJobId;
-  const hasJobs = !!smeltJobId && !!prospectJobId && !is2DOnly;
+  const hasJobs = !!prospectJobId && (is2DMesh || !is2DOnly);
 
   /* ── Mark a step active ──────────────────────────────────── */
   function setStepActive(stepId: string) {
@@ -284,11 +318,10 @@ function MeshPipeline({ smeltingData, prospectingData, onBack, onLock }: MeshPip
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          smelt_job_id:        smeltJobId,
           prospect_job_id:     prospectJobId,
           image_index:         lockedImageIndex,
-          tinker_mode:         true,
-          reconstruction_path: "organic",
+          // "auto" → SF3D full 3D; "relief" → 2.5D depth mesh; "extrude" → 2D flat billboard
+          reconstruction_path: is2DMesh ? mesh2dMode : "auto",
           export_format:       exportFormat.toLowerCase(),
           target_poly_count:   15000,
         }),
@@ -343,7 +376,17 @@ function MeshPipeline({ smeltingData, prospectingData, onBack, onLock }: MeshPip
           ));
           const meshUrl_ = (event.mesh_url as string | null) ?? null;
           const outDir_  = (event.out_dir  as string | null) ?? null;
-          if (meshUrl_) setMeshUrl(meshUrl_);
+          if (meshUrl_) {
+            setMeshUrl(meshUrl_);
+            addToTray({
+              src: meshUrl_,
+              thumbnailSrc: previewImage ?? meshUrl_,
+              label: is2DMesh ? (mesh2dMode === "relief" ? "2.5D Relief" : "2D Flat") : "3D Mesh",
+              sourceStage: "forge",
+              sourceJobId: job_id,
+              tags: ["glb"],
+            });
+          }
           setExportDir(outDir_);
           setGenStatus("Pipeline complete");
           setDone(true);
@@ -454,9 +497,32 @@ function MeshPipeline({ smeltingData, prospectingData, onBack, onLock }: MeshPip
       {/* ── LEFT: step-by-step panel ─────────────────────── */}
       <aside className="mesh__panel">
         <div className="mesh__panel-header">
-          <span className="mesh__panel-title">🗿 Mesh Pipeline</span>
+          <span className="mesh__panel-title">{is2DMesh ? "🪧 2D Mesh Pipeline" : "🗿 Mesh Pipeline"}</span>
           <button className="forge__back-btn" onClick={onBack}>← Back</button>
         </div>
+
+        {is2DMesh && (
+          <div style={{ display: "flex", gap: "var(--space-2)", padding: "var(--space-3)", paddingBottom: 0 }}>
+            {([["relief", "2.5D Relief", "depth · lit surface"], ["extrude", "2D Flat", "extruded billboard"]] as [Mesh2DMode, string, string][]).map(([m, label, hint]) => (
+              <button
+                key={m}
+                onClick={() => setMesh2dMode(m)}
+                disabled={running}
+                style={{
+                  flex: 1, display: "flex", flexDirection: "column", gap: 2,
+                  padding: "var(--space-2)", borderRadius: 8, textAlign: "left",
+                  border: mesh2dMode === m ? "1px solid var(--yellow-core)" : "1px solid rgba(255,255,255,0.1)",
+                  background: mesh2dMode === m ? "var(--forge-glow-bg)" : "transparent",
+                  color: mesh2dMode === m ? "var(--yellow-bright)" : "var(--text-muted)",
+                  cursor: running ? "default" : "pointer", fontWeight: 700, fontSize: "var(--text-sm)",
+                }}
+              >
+                {label}
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 400, opacity: 0.75 }}>{hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mesh__panel-scroll">
           {steps.map((step, i) => (
@@ -489,17 +555,21 @@ function MeshPipeline({ smeltingData, prospectingData, onBack, onLock }: MeshPip
             </div>
           )}
 
-          {/* 2D asset type warning */}
-          {is2DOnly && !running && (
+          {/* 2D asset type warning — only blocks the full-3D SF3D route */}
+          {is2DOnly && !is2DMesh && !running && (
             <div className="forge__error-box" style={{ background: "rgba(255,200,0,0.08)", borderColor: "rgba(255,200,0,0.2)", color: "var(--yellow-bright)" }}>
               ⚠ <strong>{(prospectingData?.assetType ?? "").replace("_", " ").toUpperCase()}</strong> is a 2D asset type.
-              The mesh pipeline requires a 3D type (Weapon, Character, Prop, etc.).
+              The 3D Mesh pipeline needs a 3D type (Weapon, Character, Prop) — or use the <strong>2D Mesh</strong> pipeline.
             </div>
           )}
 
-          {!hasJobs && !is2DOnly && !running && (
+          {!hasJobs && !(is2DOnly && !is2DMesh) && !running && (
             <div className="forge__error-box" style={{ background: "rgba(255,200,0,0.08)", borderColor: "rgba(255,200,0,0.2)", color: "var(--yellow-bright)" }}>
-              ⚠ Complete Smelting first — the mesh pipeline reconstructs from 6 multi-view renders
+              ⚠ Lock a Prospect image first — {is2DMesh
+                ? (mesh2dMode === "relief"
+                    ? "the 2.5D relief is built from your concept image's depth"
+                    : "the 2D billboard is built from your concept image")
+                : "Stable Fast 3D builds the mesh from your locked concept image"}
             </div>
           )}
 
@@ -537,7 +607,7 @@ function MeshPipeline({ smeltingData, prospectingData, onBack, onLock }: MeshPip
               onClick={runPipeline}
               disabled={!hasJobs}
             >
-              ✦ Run Mesh Pipeline
+              {is2DMesh ? (mesh2dMode === "relief" ? "✦ Run 2.5D Relief" : "✦ Run 2D Flat") : "✦ Run Mesh Pipeline"}
             </button>
           )}
         </div>
