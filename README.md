@@ -24,10 +24,6 @@ A concept prompt in, a textured 3D mesh out — all generated locally:
   </tr>
 </table>
 
-**▶ Spin them yourself:** [`slime.glb`](docs/examples/slime.glb) ·
-[`mushroom.glb`](docs/examples/mushroom.glb) — GitHub renders `.glb` files in an
-interactive 3D viewer when you open them.
-
 ---
 
 ## What it does
