@@ -30,12 +30,24 @@ are shipped in this repo.
 - **Backend:** Python 3.11 + FastAPI + uvicorn (API on port **7842**), SSE job streaming
 - **AI/ML:** PyTorch, `diffusers` (SDXL), `rembg`, `trimesh`, and Stable Fast 3D
 
-## Hardware
+## Hardware & platform support
 
 The baseline target is an **8 GB NVIDIA GPU** (e.g. RTX 3070) with **CUDA 12.1**.
 The VRAM arbiter keeps only one heavy model resident at a time so the pipeline
 fits in 8 GB. A CPU-only install runs the frontend/API for development but cannot
 perform GPU inference.
+
+| Platform | UI | Image gen (SDXL) | 3D mesh (SF3D) |
+|----------|----|------------------|-----------------|
+| **Windows + NVIDIA (CUDA 12.1)** | ✅ | ✅ | ✅ — primary target |
+| **Linux + NVIDIA (CUDA 12.1)** | ✅ | ✅ | ✅ — run the backend/frontend manually (see below) |
+| **macOS** | ✅ | ⚠️ CPU-only, very slow | ❌ — see note |
+| **Any, CPU-only** | ✅ | ⚠️ very slow | ❌ |
+
+> **macOS note:** the desktop UI runs, but inference is currently **CUDA-only** and
+> falls back to CPU (no Metal/MPS acceleration yet). SF3D's mesh-texture step is a
+> CUDA extension that doesn't build on macOS, so the 3D pipeline won't run there.
+> Metal/MPS support is on the [roadmap](docs/ROADMAP.md).
 
 ---
 
