@@ -21,9 +21,15 @@ BASE_NEGATIVE = (
     # Gloss/specular AND shadow are the top mesh-corruptors: SF3D reads any
     # luminance variation as geometry (a hotspot → a bump, a crevice → a dent),
     # so kill both hard for 3D-reconstruction input.
+    # Multi-subject suppression is front-loaded (survives the 77-token cut) and
+    # applies to EVERY asset type + art style — illustrative styles (painterly,
+    # sketch, cel-shaded, concept art) bias SDXL toward multi-figure scenes /
+    # character sheets that a positive "one X only" cue can't hold back alone.
+    "multiple subjects, multiple objects, two characters, group of people, crowd, "
+    "character sheet, multiple views, duplicate, "
     "shadow, ground shadow, ambient occlusion, reflection, glossy, "
     "specular highlights, shiny, reflective surface, wet look, plastic sheen, glare, "
-    "multiple objects, duplicate, gradient background, scene background, floor, pedestal, "
+    "gradient background, scene background, floor, pedestal, "
     "blurry, low quality, jpeg artifacts, watermark, text, cropped, "
     "deformed, bad anatomy, extra limbs, extra fingers, mutation"
 )

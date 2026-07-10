@@ -45,8 +45,8 @@ PYTHON_DEPS_MAP: dict[str, dict] = {
 
 MODELS_MAP: dict[str, dict] = {
     "dreamshaper_xl": {
-        "name":     "DreamShaper XL Turbo (optional SDXL checkpoint)",
-        "filename": "DreamShaperXL_Turbo_v2.safetensors",
+        "name":     "DreamShaper XL (optional SDXL checkpoint)",
+        "filename": "DreamShaperXL_v2_1.safetensors",  # matches the registry + existing installs
         "dest_dir": _mdir("checkpoints"),
         "url":      "https://huggingface.co/Lykon/dreamshaper-xl-v2-turbo/resolve/main/DreamShaperXL_Turbo_v2.safetensors",
         "size_mb":  6800,

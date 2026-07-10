@@ -197,36 +197,50 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
     };
   }, []);
 
-  /* Scan the real LoRA library from the backend once. */
+  /* Scan the real LoRA library from the backend. Retries until the backend is
+     up — the desktop window can open before the FastAPI process is ready, and
+     a single failed fetch would otherwise leave the list permanently empty. */
   useEffect(() => {
     let cancelled = false;
-    fetch(`${BACKEND}/api/loras`)
-      .then(r => r.ok ? r.json() as Promise<{ loras: { id: string; name: string; filename: string; size_mb: number }[] }> : Promise.reject(r.status))
-      .then(data => {
-        if (cancelled) return;
-        setLoras(data.loras.map(l => ({ ...l, weight: 0.8, enabled: false })));
-      })
-      .catch(() => {/* backend may not be up yet */});
+    let attempt = 0;
+    const load = () => {
+      fetch(`${BACKEND}/api/loras`)
+        .then(r => r.ok ? r.json() as Promise<{ loras: { id: string; name: string; filename: string; size_mb: number }[] }> : Promise.reject(r.status))
+        .then(data => {
+          if (cancelled) return;
+          setLoras(data.loras.map(l => ({ ...l, weight: 0.8, enabled: false })));
+        })
+        .catch(() => {
+          if (!cancelled && attempt++ < 15) setTimeout(load, 1500);
+        });
+    };
+    load();
     return () => { cancelled = true; };
   }, []);
 
-  /* Scan the switchable model registry from the backend once. */
+  /* Scan the switchable model registry from the backend (same retry rationale). */
   useEffect(() => {
     let cancelled = false;
-    fetch(`${BACKEND}/api/models`)
-      .then(r => r.ok ? r.json() as Promise<{ models: ModelInfo[] }> : Promise.reject(r.status))
-      .then(data => {
-        if (cancelled) return;
-        setModels(data.models);
-        // Default the picker to the shipped default (or first enabled).
-        setSelectedModel(prev => {
-          if (prev) return prev;
-          const def = data.models.find(m => m.default && m.enabled)
-            ?? data.models.find(m => m.enabled);
-          return def?.id ?? null;
+    let attempt = 0;
+    const load = () => {
+      fetch(`${BACKEND}/api/models`)
+        .then(r => r.ok ? r.json() as Promise<{ models: ModelInfo[] }> : Promise.reject(r.status))
+        .then(data => {
+          if (cancelled) return;
+          setModels(data.models);
+          // Default the picker to the shipped default (or first enabled).
+          setSelectedModel(prev => {
+            if (prev) return prev;
+            const def = data.models.find(m => m.default && m.enabled)
+              ?? data.models.find(m => m.enabled);
+            return def?.id ?? null;
+          });
+        })
+        .catch(() => {
+          if (!cancelled && attempt++ < 15) setTimeout(load, 1500);
         });
-      })
-      .catch(() => {/* backend may not be up yet */});
+    };
+    load();
     return () => { cancelled = true; };
   }, []);
 

@@ -93,8 +93,8 @@ REQUIRED_MODELS = [
         # props, and stylized renders. Used by Prospect (txt2img) and
         # Smelt 2D (IP-Adapter direction generation).
         "id":       "dreamshaper_xl",
-        "name":     "DreamShaper XL Turbo (optional SDXL checkpoint)",
-        "filename": "DreamShaperXL_Turbo_v2.safetensors",
+        "name":     "DreamShaper XL (optional SDXL checkpoint)",
+        "filename": "DreamShaperXL_v2_1.safetensors",  # matches the registry + existing installs
         "dest_dir": _models_dir("checkpoints"),
         "url":      "https://huggingface.co/Lykon/dreamshaper-xl-v2-turbo/resolve/main/DreamShaperXL_Turbo_v2.safetensors",
         "size_mb":  6800,

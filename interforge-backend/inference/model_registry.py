@@ -59,10 +59,12 @@ BUILTINS: list[ModelDef] = [
         license="OpenRAIL-M",
     ),
     ModelDef(
-        id="dreamshaper", label="DreamShaper XL Turbo",
+        id="dreamshaper", label="DreamShaper XL",
         kind="sdxl", source_type="local_file",
-        source="DreamShaperXL_Turbo_v2.safetensors",
-        note="Versatile artistic SDXL (Turbo) — strong 2D art (not mesh-friendly).",
+        # Filename must match what setup downloads AND what users already have
+        # on disk. (The Lykon URL serves Turbo weights under this v2_1 name.)
+        source="DreamShaperXL_v2_1.safetensors",
+        note="Versatile artistic SDXL — strong 2D art (not mesh-friendly).",
         license="OpenRAIL-M",
     ),
     ModelDef(
