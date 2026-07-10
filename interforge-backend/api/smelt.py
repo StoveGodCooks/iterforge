@@ -23,6 +23,11 @@ from core.job_manager import create_job, run_job
 router = APIRouter()
 
 
+class LoraSelection(BaseModel):
+    file: str          # LoRA id/stem (matches GET /api/loras `id`)
+    weight: float = 0.8
+
+
 class SmeltRequest(BaseModel):
     """Pose-frame generation params."""
     prospect_job_id: str = ""       # locked Prospect -> identity mode (IP-Adapter)
@@ -35,6 +40,7 @@ class SmeltRequest(BaseModel):
     controlnet_scale: float | None = None  # pose lock strength
     ip_scale: float | None = None   # identity strength (identity mode only)
     seed: int = -1                  # -1 = random
+    loras: list[LoraSelection] | None = None  # LoRA adapters to apply
 
 
 @router.post("/api/smelt/all-views")

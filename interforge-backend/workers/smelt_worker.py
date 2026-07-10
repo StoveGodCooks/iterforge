@@ -233,6 +233,7 @@ async def run_smelt_sprite_sheet(job: Job, params: dict) -> None:
         async with _heartbeat(job, "Loading SDXL pipeline"):
             with profiler.section("engine_load", "Load SDXL into VRAM"):
                 await _asyncio.to_thread(engine.load)
+                await _asyncio.to_thread(engine.set_loras, params.get("loras"))
         await job.push(log_event("SDXL loaded — loading IP-Adapter…"))
 
         async with _heartbeat(job, "Loading IP-Adapter (first run downloads ~4GB)"):
@@ -557,6 +558,7 @@ async def run_smelt_tiled_sheet(job: Job, params: dict) -> None:
         async with _heartbeat(job, "Loading SDXL pipeline"):
             with profiler.section("engine_load", "Load SDXL into VRAM"):
                 await _asyncio.to_thread(engine.load)
+                await _asyncio.to_thread(engine.set_loras, params.get("loras"))
         async with _heartbeat(job, "Loading ControlNet OpenPose (~2.5GB on first run)"):
             with profiler.section("controlnet_load", "Load ControlNet OpenPose"):
                 await _asyncio.to_thread(engine.load_controlnet_openpose)

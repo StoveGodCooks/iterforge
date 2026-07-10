@@ -15,6 +15,11 @@ from core.job_manager import create_job, run_job
 router = APIRouter()
 
 
+class LoraSelection(BaseModel):
+    file: str          # LoRA id/stem (matches GET /api/loras `id`)
+    weight: float = 0.8
+
+
 class ProspectRequest(BaseModel):
     prompt: str
     neg_prompt: str = ""
@@ -24,6 +29,7 @@ class ProspectRequest(BaseModel):
     seed: int = -1
     batch_size: int | None = None
     reference_image_path: str | None = None   # local path to img2img source
+    loras: list[LoraSelection] | None = None  # LoRA adapters to apply
 
 
 class SvgRequest(BaseModel):

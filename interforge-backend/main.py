@@ -27,7 +27,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api import jobs, prospect, smelt, poses, forge, forge2d, status, masterforge, setup, dev, publish
+from api import jobs, prospect, smelt, poses, forge, forge2d, status, masterforge, setup, dev, publish, loras
 
 # Ensure the projects output root exists before mounting
 PROJECTS_ROOT = Path.home() / "interforge-projects"
@@ -73,6 +73,7 @@ app.include_router(poses.router)
 app.include_router(forge.router)
 app.include_router(forge2d.router)
 app.include_router(masterforge.router)
+app.include_router(loras.router)
 app.include_router(publish.router)
 app.include_router(dev.router)
 

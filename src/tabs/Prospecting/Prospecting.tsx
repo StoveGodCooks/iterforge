@@ -92,21 +92,13 @@ const SAMPLERS = [
 
 /* ── Mock LoRA list (will be populated from backend scan) ───── */
 interface LoRA {
-  id: string;
-  name: string;
-  type: "style" | "character" | "object" | "material";
-  tags: string[];   // asset type IDs this LoRA is relevant to
+  id: string;          // filename stem (sent to the backend as `file`)
+  name: string;        // prettified label
+  filename?: string;
+  size_mb?: number;
   weight: number;
   enabled: boolean;
 }
-
-const MOCK_LORAS: LoRA[] = [
-  { id: "detail_tweaker", name: "Detail Tweaker XL",    type: "style",     tags: ["character","creature","weapon","armor"], weight: 0.7, enabled: false },
-  { id: "game_icon",      name: "Game Icon Style",       type: "style",     tags: ["ui","logo","prop"],                      weight: 0.8, enabled: false },
-  { id: "dark_fantasy",   name: "Dark Fantasy XL",       type: "style",     tags: ["character","creature","environment"],    weight: 0.6, enabled: false },
-  { id: "metal_material", name: "Metal & Steel Material",type: "material",  tags: ["weapon","armor","shield","vehicle"],     weight: 0.65,enabled: false },
-  { id: "low_poly_xl",    name: "Low Poly XL",           type: "style",     tags: ["character","prop","building"],           weight: 0.75,enabled: false },
-];
 
 /* ============================================================
    MAIN COMPONENT
@@ -131,7 +123,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
   const [batch,    setBatch]    = useState(1);
 
   /* LoRAs */
-  const [loras, setLoras] = useState<LoRA[]>(MOCK_LORAS);
+  const [loras, setLoras] = useState<LoRA[]>([]);
 
   /* Img2Img */
   const [img2imgOn,  setImg2imgOn]  = useState(false);
@@ -164,6 +156,19 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
     };
   }, []);
 
+  /* Scan the real LoRA library from the backend once. */
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${BACKEND}/api/loras`)
+      .then(r => r.ok ? r.json() as Promise<{ loras: { id: string; name: string; filename: string; size_mb: number }[] }> : Promise.reject(r.status))
+      .then(data => {
+        if (cancelled) return;
+        setLoras(data.loras.map(l => ({ ...l, weight: 0.8, enabled: false })));
+      })
+      .catch(() => {/* backend may not be up yet */});
+    return () => { cancelled = true; };
+  }, []);
+
   /* SVG overlay */
   const [svgOn,        setSvgOn]        = useState(false);
   const [svgDetail,    setSvgDetail]    = useState(0.6);
@@ -187,9 +192,9 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
   const isConcept = assetType === "concept";
 
   /* Suggested LoRAs for current asset type */
-  const suggestedLoras = assetType
-    ? loras.filter(l => l.tags.includes(assetType))
-    : loras;
+  // Real LoRA files have no tags — show them all.
+  const suggestedLoras = loras;
+  const activeLoras = loras.filter(l => l.enabled).map(l => ({ file: l.id, weight: l.weight }));
 
   /* Toggle LoRA on/off */
   function toggleLora(id: string) {
@@ -270,6 +275,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
           seed,
           batch_size:   batch,
           reference_image_path: img2imgOn && img2imgPath ? img2imgPath : null,
+          loras:        activeLoras,
         }),
       });
       if (!res.ok) {
@@ -481,6 +487,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
       reconstructionPath: (meta.reconstructionPath as ReconstructionPath) ?? null,
       prospectJobId:      currentJobId,
       lockedImageIndex:   selected,
+      loras:              activeLoras,
     });
   }
 
@@ -688,19 +695,12 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
             {/* Backend scan notice */}
             <div className="lora-scan-notice">
               <span>📂</span>
-              <span>Auto-scanned from <code>models/loras/</code></span>
+              <span>{loras.length} scanned from <code>models/loras/</code></span>
             </div>
 
-            {/* Show suggested LoRAs for selected asset type */}
-            {assetType && suggestedLoras.length === 0 && (
+            {loras.length === 0 && (
               <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: "var(--space-3)" }}>
-                No LoRAs tagged for this asset type yet.
-              </p>
-            )}
-
-            {!assetType && (
-              <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: "var(--space-3)" }}>
-                Select an Asset Type above to see relevant LoRAs.
+                No LoRA files found in <code>models/loras/</code>.
               </p>
             )}
 
@@ -710,9 +710,9 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
                   <div className="lora-card__top">
                     <div className="lora-card__info">
                       <span className="lora-card__name">{lora.name}</span>
-                      <span className={`badge badge--${lora.type === "style" ? "yellow" : "ember"}`}>
-                        {lora.type}
-                      </span>
+                      {typeof lora.size_mb === "number" && (
+                        <span className="badge badge--yellow">{lora.size_mb} MB</span>
+                      )}
                     </div>
                     <button
                       className={`lora-toggle ${lora.enabled ? "lora-toggle--on" : ""}`}

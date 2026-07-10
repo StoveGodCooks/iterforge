@@ -79,6 +79,7 @@ async def run_prospect(job: Job, params: dict) -> None:
     try:
         with profiler.section("engine_load", "Load SDXL pipeline into VRAM"):
             await asyncio.to_thread(engine.load)
+            await asyncio.to_thread(engine.set_loras, params.get("loras"))
 
         job.checkpoint(0)
 

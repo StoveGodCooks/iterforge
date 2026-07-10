@@ -150,6 +150,7 @@ class ForgeEngine:
         self._ip_adapter_loaded: bool = False
         self._device_ready: bool = False  # True once offload hooks are set
         self._controlnet_openpose = None   # ControlNetModel, lazy-loaded
+        self._active_loras: tuple = ()     # applied LoRA signature (adapter, path, weight)
 
     @classmethod
     def get(cls) -> "ForgeEngine":
@@ -160,6 +161,64 @@ class ForgeEngine:
     @property
     def is_loaded(self) -> bool:
         return self._pipe is not None
+
+    # ── LoRA adapters ────────────────────────────────────────
+
+    def set_loras(self, loras: "list[dict] | None") -> None:
+        """
+        Apply LoRA adapters to the loaded pipeline (non-fatal).
+
+        loras: list of {"file": <id/stem>, "weight": <float>}. Empty/None clears
+        all adapters. Each file resolves to MODELS_ROOT/loras/{file}.safetensors.
+        A no-op if the selection is unchanged from the previous call. Any failure
+        is logged and generation continues without the LoRA rather than crashing.
+        """
+        import re
+        from pathlib import Path
+        from core.config import MODELS_ROOT
+
+        loras_dir = MODELS_ROOT / "loras"
+        want: list[tuple[str, str, float]] = []
+        for item in (loras or []):
+            stem = str(item.get("file", "")).strip()
+            if not stem:
+                continue
+            path = loras_dir / f"{stem}.safetensors"
+            if not path.exists():
+                log.warning(f"[lora] not found, skipping: {path.name}")
+                continue
+            adapter = re.sub(r"[^A-Za-z0-9_]", "_", stem)
+            weight = float(item.get("weight", 0.8))
+            want.append((adapter, str(path), weight))
+
+        signature = tuple(want)
+        if signature == self._active_loras:
+            return  # unchanged — nothing to do
+        if self._pipe is None:
+            log.warning("[lora] pipe not loaded; skipping LoRA application")
+            return
+
+        try:
+            # Clear whatever was applied before (safe even if none).
+            try:
+                self._pipe.unload_lora_weights()
+            except Exception:
+                pass
+            if want:
+                names, weights = [], []
+                for adapter, path, weight in want:
+                    self._pipe.load_lora_weights(path, adapter_name=adapter)
+                    names.append(adapter)
+                    weights.append(weight)
+                self._pipe.set_adapters(names, adapter_weights=weights)
+                log.info("[lora] applied: " + ", ".join(
+                    f"{n}@{w:.2f}" for n, w in zip(names, weights)))
+            else:
+                log.info("[lora] cleared all adapters")
+            self._active_loras = signature
+        except Exception as exc:
+            log.warning(f"[lora] failed to apply (continuing without LoRA): {exc}")
+            self._active_loras = ()
 
     # ── Load / Unload ────────────────────────────────────────
 
