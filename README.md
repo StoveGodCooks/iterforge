@@ -9,6 +9,27 @@ entirely on your own machine. No subscriptions, no cloud, no data leaving your P
 
 ---
 
+## Examples
+
+A concept prompt in, a textured 3D mesh out — all generated locally:
+
+<table>
+  <tr>
+    <td align="center"><b>Prompt → concept (SDXL)</b></td>
+    <td align="center"><b>Generated 3D mesh (SF3D)</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/examples/slime_concept.png" width="320" alt="Slime concept art"></td>
+    <td><img src="docs/examples/slime_3d.png" width="320" alt="Slime 3D mesh"></td>
+  </tr>
+</table>
+
+**▶ Spin them yourself:** [`slime.glb`](docs/examples/slime.glb) ·
+[`mushroom.glb`](docs/examples/mushroom.glb) — GitHub renders `.glb` files in an
+interactive 3D viewer when you open them.
+
+---
+
 ## What it does
 
 InterForge is a desktop app that walks an asset through a staged pipeline:
