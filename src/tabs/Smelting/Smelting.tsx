@@ -133,6 +133,10 @@ export default function Smelting({ prospectingData, onLock }: Props) {
       if (prospectingData?.loras && prospectingData.loras.length > 0) {
         body.loras = prospectingData.loras;
       }
+      // Reuse the Prospect's model so the character stays on the same checkpoint.
+      if (prospectingData?.model) {
+        body.model = prospectingData.model;
+      }
 
       const res = await fetch(`${BACKEND}/api/smelt/all-views`, {
         method: "POST",

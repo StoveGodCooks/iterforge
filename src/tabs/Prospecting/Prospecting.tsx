@@ -8,7 +8,7 @@ import ifLogoGlb from "../../assets/if-logo.glb?url";
 import { useAssetTray } from "../../contexts/AssetTrayContext";
 import { useAnvilBoard } from "../../contexts/AnvilBoardContext";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import type { ProspectingOutput, AssetType, ArtStyle, ReconstructionPath } from "../../types/pipeline";
+import type { ProspectingOutput, AssetType, ArtStyle, ReconstructionPath, ModelInfo } from "../../types/pipeline";
 
 const BACKEND = "http://127.0.0.1:7842";
 
@@ -129,6 +129,10 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
   /* LoRAs */
   const [loras, setLoras] = useState<LoRA[]>([]);
 
+  /* Models (switchable checkpoints from the registry) */
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+
   /* Img2Img */
   const [img2imgOn,  setImg2imgOn]  = useState(false);
   const [img2imgSrc, setImg2imgSrc] = useState<string | null>(null);
@@ -206,6 +210,26 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
     return () => { cancelled = true; };
   }, []);
 
+  /* Scan the switchable model registry from the backend once. */
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${BACKEND}/api/models`)
+      .then(r => r.ok ? r.json() as Promise<{ models: ModelInfo[] }> : Promise.reject(r.status))
+      .then(data => {
+        if (cancelled) return;
+        setModels(data.models);
+        // Default the picker to the shipped default (or first enabled).
+        setSelectedModel(prev => {
+          if (prev) return prev;
+          const def = data.models.find(m => m.default && m.enabled)
+            ?? data.models.find(m => m.enabled);
+          return def?.id ?? null;
+        });
+      })
+      .catch(() => {/* backend may not be up yet */});
+    return () => { cancelled = true; };
+  }, []);
+
   /* SVG overlay */
   const [svgOn,        setSvgOn]        = useState(false);
   const [svgDetail,    setSvgDetail]    = useState(0.6);
@@ -219,6 +243,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
     style: true,
     gen:   false,
     lora:  false,
+    model: false,
   });
   function toggleSection(key: string) {
     setOpen(prev => ({ ...prev, [key]: !prev[key] }));
@@ -313,6 +338,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
           batch_size:   batch,
           reference_image_path: img2imgOn && img2imgPath ? img2imgPath : null,
           loras:        activeLoras,
+          model:        selectedModel,
         }),
       });
       if (!res.ok) {
@@ -525,6 +551,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
       prospectJobId:      currentJobId,
       lockedImageIndex:   selected,
       loras:              activeLoras,
+      model:              selectedModel ?? undefined,
     });
   }
 
@@ -770,6 +797,60 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
                   )}
                 </div>
               ))}
+            </div>
+          </Collapsible>
+
+          {/* 7. MODEL ───────────────────────────────────────── */}
+          <Collapsible icon="🎨" title="Model" id="model"
+            open={open.model} onToggle={() => toggleSection("model")}
+            badge={models.find(m => m.id === selectedModel)?.label}>
+
+            <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: "var(--space-3)" }}>
+              First use of a model downloads it; on 8&nbsp;GB VRAM, switching unloads
+              the current model and reloads.
+            </p>
+
+            {models.length === 0 && (
+              <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                No models reported by the backend.
+              </p>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+              {models.map(m => {
+                const active = m.id === selectedModel;
+                const disabled = !m.enabled;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`lora-card ${active ? "lora-card--active" : ""}`}
+                    disabled={disabled}
+                    onClick={() => !disabled && setSelectedModel(m.id)}
+                    style={{
+                      textAlign: "left", cursor: disabled ? "not-allowed" : "pointer",
+                      opacity: disabled ? 0.5 : 1, width: "100%",
+                      border: active ? "1px solid var(--yellow-bright)" : undefined,
+                    }}
+                  >
+                    <div className="lora-card__top">
+                      <div className="lora-card__info">
+                        <span className="lora-card__name">{m.label}</span>
+                        <span className="badge badge--yellow">{m.license}</span>
+                        {!m.local && <span className="badge">↓ download</span>}
+                        {disabled && <span className="badge">soon</span>}
+                      </div>
+                      <span
+                        className={`lora-toggle ${active ? "lora-toggle--on" : ""}`}
+                        style={{ pointerEvents: "none" }}
+                      />
+                    </div>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: "var(--space-1)" }}>
+                      {m.note}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </Collapsible>
 

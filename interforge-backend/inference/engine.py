@@ -1,8 +1,9 @@
 """
 inference/engine.py — SDXL inference via diffusers.
 
-Loads DreamShaper-XL (or any SDXL checkpoint) directly on the GPU,
-runs diffusion sampling in-process, and returns PIL images.
+Loads an SDXL checkpoint (chosen via the model registry — default base SDXL,
+or any switchable/user-dropped model) directly on the GPU, runs diffusion
+sampling in-process, and returns PIL images.
 
 Features:
   - Direct VRAM control             (explicit load/unload)
@@ -44,35 +45,26 @@ log = logging.getLogger(__name__)
 # ── Model paths ───────────────────────────────────────────────
 
 _APPDATA = Path(os.environ.get("APPDATA", str(Path.home())))
-_CKPT_NAME = "DreamShaperXL_v2_1.safetensors"
-
-_DEFAULT_CKPT_SEARCH = [
-    _APPDATA / "IterForge" / "models" / "checkpoints" / _CKPT_NAME,
-    # Legacy fallback — Juggernaut XL still works if user hasn't swapped yet
-    _APPDATA / "IterForge" / "models" / "checkpoints" / "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors",
-]
 
 def _find_checkpoint() -> str:
     """
-    Resolve the SDXL model for the 8GB tier.
+    Resolve the SDXL checkpoint for a bare load() with no model chosen.
 
-    Default = Samaritan 3D Cartoon (stylized, matte) — the SF3D-friendly baseline.
-    A realism checkpoint (DreamShaper/Juggernaut) bakes shadows and specular gloss
-    that SF3D misreads as geometry, so the stylized model is the mesh-pipeline default.
-
-    Overrides: INTERFORGE_SDXL_CHECKPOINT (explicit path/id) or a local
-    Samaritan .safetensors dropped in the checkpoints dir; INTERFORGE_SDXL_MODEL
-    swaps the default model id (e.g. a higher tier's checkpoint).
+    Order: INTERFORGE_SDXL_CHECKPOINT (explicit path/id) or INTERFORGE_SDXL_MODEL
+    (swap the default model id) as env overrides; otherwise the model registry's
+    shipped default (base SDXL). The in-app Model picker calls load_model() with
+    an explicit id instead of going through here.
     """
     env_path = os.environ.get("INTERFORGE_SDXL_CHECKPOINT")
     if env_path:
         return env_path
 
-    local_sam = _APPDATA / "IterForge" / "models" / "checkpoints" / "Samaritan-3d-Cartoon-v4.safetensors"
-    if local_sam.exists():
-        return str(local_sam)
+    env_model = os.environ.get("INTERFORGE_SDXL_MODEL")
+    if env_model:
+        return env_model
 
-    return os.environ.get("INTERFORGE_SDXL_MODEL", "imagepipeline/Samaritan-3d-Cartoon-v4-SDXL")
+    from inference.model_registry import default_model, resolve_source
+    return resolve_source(default_model())
 
 
 # ── Scheduler helpers ────────────────────────────────────────
@@ -147,6 +139,7 @@ class ForgeEngine:
         self._device: Optional[str] = None
         self._dtype = None
         self._checkpoint_path: str = ""
+        self._model_id: Optional[str] = None   # registry id of the loaded model
         self._ip_adapter_loaded: bool = False
         self._device_ready: bool = False  # True once offload hooks are set
         self._controlnet_openpose = None   # ControlNetModel, lazy-loaded
@@ -161,6 +154,48 @@ class ForgeEngine:
     @property
     def is_loaded(self) -> bool:
         return self._pipe is not None
+
+    def current_model_id(self) -> Optional[str]:
+        """The registry id of the currently loaded model (None if unloaded)."""
+        return self._model_id if self._pipe is not None else None
+
+    # ── Model switching (adapter dispatch) ───────────────────
+
+    def load_model(self, model_id: "str | None") -> None:
+        """
+        Load a model by registry id, switching if a different one is resident.
+
+        This is the entry point for the in-app Model picker. Because load()
+        short-circuits when a pipe is already loaded, a switch must unload the
+        current pipe first — otherwise picking a new model would be a silent
+        no-op. Dispatches on the model's `kind` (the adapter seam): "sdxl" loads
+        via the existing SDXL path; "flux" is a stub until the FLUX pipeline
+        lands. First use of an hf_repo model downloads it, then runs offline.
+        """
+        from inference.model_registry import get_model, resolve_source
+
+        m = get_model(model_id)
+
+        # Already the active model — nothing to do.
+        if self._pipe is not None and self._model_id == m.id:
+            return
+
+        # Different model requested while one is loaded → free it first.
+        if self._pipe is not None:
+            log.info(f"[engine] Switching model {self._model_id!r} → {m.id!r}")
+            self.unload()
+
+        if m.kind == "sdxl":
+            self.load(checkpoint=resolve_source(m))
+        elif m.kind == "flux":
+            raise NotImplementedError(
+                f"Model '{m.id}' (kind=flux) is not wired yet — FLUX support "
+                "is coming in the 16 GB tier."
+            )
+        else:
+            raise ValueError(f"Unknown model kind: {m.kind!r}")
+
+        self._model_id = m.id
 
     # ── LoRA adapters ────────────────────────────────────────
 
@@ -313,8 +348,12 @@ class ForgeEngine:
                 pass
             del self._pipe
             self._pipe = None
+            self._model_id = None
             self._ip_adapter_loaded = False
             self._device_ready = False
+            # The new pipe has no LoRAs; clear the applied-signature so the next
+            # set_loras() actually re-applies instead of no-op'ing on a match.
+            self._active_loras = ()
             if self._controlnet_openpose is not None:
                 del self._controlnet_openpose
                 self._controlnet_openpose = None
@@ -1007,8 +1046,10 @@ class ForgeEngine:
         except Exception:
             pass
         self._pipe = None
+        self._model_id = None
         self._ip_adapter_loaded = False
         self._device_ready = False
+        self._active_loras = ()
         self._controlnet_openpose = None
 
 

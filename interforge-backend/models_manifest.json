@@ -1,0 +1,58 @@
+{
+  "$comment": "Download manifest for InterForge models + curated LoRAs. No weights are committed to the repo; entries are fetched on first use (or by the installer) into MODELS_ROOT. See LICENSES.md at the repo root for redistribution terms. hf_repo entries download via huggingface_hub; hf_file entries are a single file within a repo.",
+  "checkpoints": [
+    {
+      "id": "sdxl-base",
+      "label": "Stable Diffusion XL",
+      "kind": "sdxl",
+      "hf_repo": "stabilityai/stable-diffusion-xl-base-1.0",
+      "license": "OpenRAIL++-M",
+      "default": true,
+      "note": "Neutral base — the shipped default; the cleanest LoRA canvas."
+    },
+    {
+      "id": "ssd-1b",
+      "label": "SSD-1B (fast)",
+      "kind": "sdxl",
+      "hf_repo": "segmind/SSD-1B",
+      "license": "Apache-2.0",
+      "note": "Distilled SDXL — ~2.5 GB, faster; fully-open license."
+    },
+    {
+      "id": "samaritan",
+      "label": "Samaritan 3D Cartoon",
+      "kind": "sdxl",
+      "hf_repo": "imagepipeline/Samaritan-3d-Cartoon-v4-SDXL",
+      "license": "OpenRAIL-M",
+      "redistribute": false,
+      "note": "Cartoon/matte — best for meshes. Un-gated; download on the user's machine. Do NOT bundle weights without verifying redistribution rights."
+    }
+  ],
+  "loras": [
+    {
+      "id": "pixel-art-xl",
+      "label": "Pixel Art XL",
+      "hf_repo": "nerijs/pixel-art-xl",
+      "hf_file": "pixel-art-xl.safetensors",
+      "license": "OpenRAIL-M",
+      "trigger": "pixel art",
+      "note": "Best-known pixel-art SDXL LoRA. Redistributable (carry use-restrictions)."
+    },
+    {
+      "id": "pixar-style-slider",
+      "label": "Pixar Style (toon)",
+      "hf_repo": "ntc-ai/SDXL-LoRA-slider.pixar-style",
+      "license": "MIT",
+      "trigger": "pixar style",
+      "note": "Toon/3D style — steers base SDXL toward clean, mesh-friendly silhouettes."
+    },
+    {
+      "id": "crayon-style",
+      "label": "Crayon / Hand-drawn",
+      "hf_repo": "ostris/crayon_style_lora_sdxl",
+      "license": "Apache-2.0",
+      "trigger": "crayon style",
+      "note": "Illustrated hand-drawn look. Fully-open Apache license."
+    }
+  ]
+}

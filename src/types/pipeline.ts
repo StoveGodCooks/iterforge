@@ -118,6 +118,19 @@ export interface LoraSelection {
   weight: number;
 }
 
+/** A switchable model from GET /api/models. `id` is sent back as `model`. */
+export interface ModelInfo {
+  id:        string;
+  label:     string;
+  kind:      string;    // "sdxl" | "flux"
+  note:      string;
+  license:   string;
+  default:   boolean;
+  enabled:   boolean;   // false = shown but not selectable (e.g. FLUX stub)
+  local:     boolean;   // true = a local checkpoint file (vs downloaded HF repo)
+  available: boolean;   // local file present, or hf_repo (downloads on first use)
+}
+
 /** One comic panel in the Anvil Sketch Board. */
 export interface AnvilPanel {
   id:        string;
@@ -157,6 +170,10 @@ export interface ProspectingOutput {
 
   /* LoRAs used for this generation — reused by the Pose page for style match */
   loras?: LoraSelection[];
+
+  /* Model used for this generation — reused by the Pose page so the character
+     stays on the same checkpoint across stages (registry id from GET /api/models) */
+  model?: string;
 }
 
 /**

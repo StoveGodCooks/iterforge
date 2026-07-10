@@ -28,6 +28,11 @@ MODELS_ROOT = Path(os.environ.get(
     os.path.join(os.environ.get("APPDATA", str(Path.home())), "IterForge", "models"),
 ))
 
+# SDXL checkpoints live here (both the registry's known models and any the user
+# drops in by hand). Centralized so engine.py / status.py / the model registry
+# all agree on one path.
+CHECKPOINTS_DIR = MODELS_ROOT / "checkpoints"
+
 # ── Reconstruction mode ──────────────────────────────────────
 # "tsdf"        → Depth Anything V2 + TSDF volumetric fusion (best quality)
 # "visual_hull" → alpha silhouette space carving (no depth model needed)

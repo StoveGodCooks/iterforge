@@ -30,6 +30,7 @@ class ProspectRequest(BaseModel):
     batch_size: int | None = None
     reference_image_path: str | None = None   # local path to img2img source
     loras: list[LoraSelection] | None = None  # LoRA adapters to apply
+    model: str | None = None                  # registry model id (GET /api/models); None = default
 
 
 class SvgRequest(BaseModel):

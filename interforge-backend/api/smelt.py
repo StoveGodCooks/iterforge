@@ -41,6 +41,7 @@ class SmeltRequest(BaseModel):
     ip_scale: float | None = None   # identity strength (identity mode only)
     seed: int = -1                  # -1 = random
     loras: list[LoraSelection] | None = None  # LoRA adapters to apply
+    model: str | None = None        # registry model id (GET /api/models); None = default
 
 
 @router.post("/api/smelt/all-views")
