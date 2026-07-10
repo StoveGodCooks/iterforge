@@ -197,6 +197,65 @@
   background: var(--yellow-dim);
 }
 
+/* ── Header logo + stage nav (replaces the old left rail) ──── */
+.header__logo {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  filter: drop-shadow(0 0 6px rgba(200, 216, 236, 0.25));
+}
+
+.header__nav {
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.header__navbtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--steel-shine);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: all 0.13s ease;
+}
+
+.header__navbtn svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.header__navbtn:hover {
+  color: var(--text-primary);
+  background: rgba(160, 175, 200, 0.05);
+  border-color: rgba(160, 175, 200, 0.10);
+}
+
+.header__navbtn.active {
+  color: var(--yellow-bright);
+  background: var(--forge-glow-bg);
+  border-color: rgba(200, 216, 236, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(200, 216, 236, 0.06);
+}
+
 /* ── Content + Tray wrapper ────────────────────────────────── */
 .content-wrap {
   flex: 1;

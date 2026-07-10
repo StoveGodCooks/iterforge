@@ -8,7 +8,6 @@ import { AssetTrayProvider } from "./contexts/AssetTrayContext";
 import { ContextMenuProvider } from "./shell/ContextMenu";
 import { ProjectsProvider } from "./components/Projects/ProjectsContext";
 
-import StageRail from "./shell/StageRail";
 import HeaderBar from "./shell/HeaderBar";
 import AssetTray from "./shell/AssetTray";
 
@@ -126,8 +125,6 @@ function AppShell() {
 
   return (
     <div className="app-shell">
-      <StageRail />
-
       <div className="app-main">
         <HeaderBar
           onSetup={() => setShowSetup(true)}
@@ -137,9 +134,11 @@ function AppShell() {
         <div className="content-wrap">
           <main className="workspace">
             <ErrorBoundary>
-              {activeView === "prospect" && <ProspectStage />}
-              {activeView === "smelt"    && <SmeltStage />}
-              {activeView === "forge"    && <ForgeStage />}
+              {/* Prospect + Forge stay mounted (display toggle) so their generated
+                  art / meshes survive navigation. Smelt/Projects/DevTools remount. */}
+              <div style={{ display: activeView === "prospect" ? "contents" : "none" }}><ProspectStage /></div>
+              {activeView === "smelt" && <SmeltStage />}
+              <div style={{ display: activeView === "forge" ? "contents" : "none" }}><ForgeStage /></div>
               {activeView === "projects" && <ProjectsShell />}
               {activeView === "devtools" && devToolsEnabled && <DevTools />}
             </ErrorBoundary>
