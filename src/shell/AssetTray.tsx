@@ -8,6 +8,7 @@ import { useState, useEffect, lazy, Suspense } from "react";
 import { useAssetTray } from "../contexts/AssetTrayContext";
 import type { AssetTrayItem } from "../contexts/AssetTrayContext";
 import { usePipeline } from "../contexts/PipelineContext";
+import { useAnvilBoard } from "../contexts/AnvilBoardContext";
 import { useContextMenu } from "./ContextMenu";
 import type { ContextMenuEntry } from "./ContextMenu";
 
@@ -20,6 +21,7 @@ function isGlb(item: AssetTrayItem): boolean {
 export default function AssetTray() {
   const { items, isOpen, toggle, removeItem } = useAssetTray();
   const { navigateTo } = usePipeline();
+  const anvil = useAnvilBoard();
   const ctxMenu = useContextMenu();
   const [viewing, setViewing] = useState<AssetTrayItem | null>(null);
 
@@ -34,7 +36,7 @@ export default function AssetTray() {
   function handleThumbContext(e: React.MouseEvent, item: AssetTrayItem) {
     const menuItems: ContextMenuEntry[] = [
       { label: "Open viewer", icon: "🔍", action: () => setViewing(item) },
-      { label: "Edit in Sketch", icon: "🖌", action: () => navigateTo("prospect") },
+      { label: "Send to Anvil", icon: "🛠", action: () => { anvil.addPanel({ imageSrc: item.src }); anvil.open(); } },
       { label: "Send to Prospect", icon: "🔷", hint: "as ref", action: () => navigateTo("prospect") },
       { separator: true },
       { label: "Remove from tray", icon: "🗑", action: () => removeItem(item.id) },

@@ -11,6 +11,7 @@ import { ProjectsProvider } from "./components/Projects/ProjectsContext";
 
 import HeaderBar from "./shell/HeaderBar";
 import AssetTray from "./shell/AssetTray";
+import AnvilSketchBoard from "./components/Anvil/AnvilSketchBoard";
 
 import ProspectStage from "./stages/Prospect/ProspectStage";
 import SmeltStage from "./stages/Smelt/SmeltStage";
@@ -166,6 +167,7 @@ function AppShell() {
         onClose={() => setBentoOpen(false)}
         onOpenProjects={() => navigateTo("projects")}
       />
+      <AnvilSketchBoard />
     </div>
   );
 }

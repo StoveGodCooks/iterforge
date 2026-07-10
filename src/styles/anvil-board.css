@@ -1,0 +1,242 @@
+/* ============================================================
+   Anvil Sketch Board — full-screen storyboard + sketch tool
+   ============================================================ */
+
+.anvil-board {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-void);
+  animation: fade-in var(--transition-normal) forwards;
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+.anvil-board__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 52px;
+  min-height: 52px;
+  padding: 0 var(--space-5);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--steel-edge);
+}
+
+.anvil-board__brand {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--yellow-bright);
+  white-space: nowrap;
+}
+
+.anvil-board__title {
+  width: 340px;
+  max-width: 40vw;
+  background: var(--bg-raised);
+  border: 1px solid var(--steel-edge);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.anvil-board__title:focus {
+  outline: none;
+  border-color: var(--yellow-core);
+  box-shadow: 0 0 0 3px var(--yellow-dim);
+}
+
+.anvil-board__spacer { flex: 1; }
+
+.anvil-board__close {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--steel-edge);
+  background: transparent;
+  color: var(--steel-shine);
+  font-size: 15px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.anvil-board__close:hover {
+  color: var(--yellow-bright);
+  border-color: var(--yellow-core);
+  background: var(--yellow-dim);
+}
+
+/* ── Body ───────────────────────────────────────────────────── */
+.anvil-board__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-8);
+}
+
+.anvil-board__story {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  background: var(--bg-raised);
+  border: 1px solid var(--steel-edge);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  padding: var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.6;
+}
+.anvil-board__story:focus {
+  outline: none;
+  border-color: var(--yellow-core);
+  box-shadow: 0 0 0 3px var(--yellow-dim);
+}
+
+.anvil-board__panels-label {
+  margin: var(--space-6) 0 var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* ── Panel grid ─────────────────────────────────────────────── */
+.anvil-board__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.anvil-cpanel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--steel-edge);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.anvil-cpanel__num {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: rgba(11, 15, 20, 0.8);
+  border: 1px solid var(--steel-edge);
+  color: var(--yellow-bright);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.anvil-cpanel__img {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--bg-void);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.anvil-cpanel__img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.anvil-cpanel__empty {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.anvil-cpanel__tools {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  background: linear-gradient(180deg, transparent, rgba(11, 15, 20, 0.85));
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.anvil-cpanel:hover .anvil-cpanel__tools { opacity: 1; }
+
+.anvil-cpanel__tools button {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--steel-edge);
+  background: var(--bg-raised);
+  color: var(--steel-shine);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.anvil-cpanel__tools button:hover:not(:disabled) {
+  color: var(--yellow-bright);
+  border-color: var(--yellow-core);
+  background: var(--yellow-dim);
+}
+.anvil-cpanel__tools button:disabled { opacity: 0.35; cursor: default; }
+
+.anvil-cpanel__caption {
+  border: none;
+  border-top: 1px solid var(--steel-edge);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+}
+.anvil-cpanel__caption:focus {
+  outline: none;
+  background: var(--bg-overlay);
+}
+
+/* Add-panel tile */
+.anvil-cpanel--add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 200px;
+  border: 1px dashed var(--steel-edge);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: all var(--transition-fast);
+}
+.anvil-cpanel--add:hover {
+  border-color: var(--yellow-core);
+  color: var(--yellow-bright);
+  background: var(--yellow-dim);
+}
+.anvil-cpanel--add__plus { font-size: 28px; line-height: 1; }
+
+/* ── Sketch sub-overlay ─────────────────────────────────────── */
+.anvil-board__sketch {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: rgba(3, 5, 8, 0.7);
+  backdrop-filter: blur(4px);
+}

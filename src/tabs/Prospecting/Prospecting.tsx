@@ -6,6 +6,8 @@ import AnvilWorkspace from "../../components/Anvil/AnvilWorkspace";
 import LogoBadge3D from "../../components/MeshViewer/LogoBadge3D";
 import ifLogoGlb from "../../assets/if-logo.glb?url";
 import { useAssetTray } from "../../contexts/AssetTrayContext";
+import { useAnvilBoard } from "../../contexts/AnvilBoardContext";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ProspectingOutput, AssetType, ArtStyle, ReconstructionPath } from "../../types/pipeline";
 
 const BACKEND = "http://127.0.0.1:7842";
@@ -135,6 +137,17 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { addItem: addToTray } = useAssetTray();
+  const anvil = useAnvilBoard();
+
+  // When the Anvil sends a panel as a reference, load it into img2img.
+  useEffect(() => {
+    if (!anvil.pendingReference) return;
+    setImg2imgPath(anvil.pendingReference);
+    try { setImg2imgSrc(convertFileSrc(anvil.pendingReference)); } catch { /* browser dev */ }
+    setImg2imgOn(true);
+    anvil.clearPendingReference();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anvil.pendingReference]);
 
   /* Output gallery */
   const [images,     setImages]     = useState<string[]>([]);
@@ -793,14 +806,14 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
               </button>
               <button
                 className={`pros__workspace-toggle-btn ${workspaceMode === "anvil" ? "pros__workspace-toggle-btn--active" : ""}`}
-                onClick={() => setWorkspaceMode("anvil")}
+                onClick={() => anvil.open()}
               >
                 Anvil
               </button>
             </div>
             {images.length > 0 && (
               <button className="btn btn--ghost" style={{ fontSize: "var(--text-xs)", height: 28 }}
-                onClick={() => { setImages([]); setSelected(null); setWorkspaceMode("anvil"); }}>
+                onClick={() => { setImages([]); setSelected(null); anvil.open(); }}>
                 Clear
               </button>
             )}
@@ -905,7 +918,7 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
                 cursor: "pointer",
                 transition: "background var(--transition-fast), border-color var(--transition-fast)",
               }}
-              onClick={() => setWorkspaceMode("anvil")}
+              onClick={() => anvil.open()}
             >
               Open Anvil →
             </button>

@@ -8,6 +8,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { usePipeline } from "../contexts/PipelineContext";
 import type { AppView } from "../contexts/PipelineContext";
 import { useAssetTray } from "../contexts/AssetTrayContext";
+import { useAnvilBoard } from "../contexts/AnvilBoardContext";
 import { useProjects } from "../components/Projects/ProjectsContext";
 import logoUrl from "../assets/logo.png";
 
@@ -38,6 +39,7 @@ const NAV: { id: AppView; label: string; icon: JSX.Element }[] = [
 export default function HeaderBar({ onSetup, onWalkthrough }: HeaderBarProps) {
   const { activeView, navigateTo } = usePipeline();
   const { toggle } = useAssetTray();
+  const { open: openAnvil } = useAnvilBoard();
   const { activeProject } = useProjects();
 
   async function minimize() { await getCurrentWindow().minimize(); }
@@ -69,6 +71,7 @@ export default function HeaderBar({ onSetup, onWalkthrough }: HeaderBarProps) {
 
       {activeProject && <span className="header__pill">{activeProject.name}</span>}
 
+      <button className="header__btn" onMouseDown={(e) => e.stopPropagation()} onClick={openAnvil}>🛠 Anvil</button>
       <button className="header__btn" onMouseDown={(e) => e.stopPropagation()} onClick={onWalkthrough}>Walkthrough</button>
       <button className="header__btn" onMouseDown={(e) => e.stopPropagation()} onClick={onSetup}>Setup</button>
       <button className="header__btn" onMouseDown={(e) => e.stopPropagation()} onClick={toggle}>Asset Tray</button>
