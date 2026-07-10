@@ -10,7 +10,8 @@ import type { AppView } from "../contexts/PipelineContext";
 import { useAssetTray } from "../contexts/AssetTrayContext";
 import { useAnvilBoard } from "../contexts/AnvilBoardContext";
 import { useProjects } from "../components/Projects/ProjectsContext";
-import logoUrl from "../assets/logo.png";
+import LogoBadge3D from "../components/MeshViewer/LogoBadge3D";
+import ifLogoGlb from "../assets/if-logo.glb?url";
 
 interface HeaderBarProps {
   onSetup: () => void;
@@ -51,7 +52,9 @@ export default function HeaderBar({ onSetup, onWalkthrough }: HeaderBarProps) {
 
   return (
     <div className="header" data-tauri-drag-region>
-      <img className="header__logo" src={logoUrl} alt="InterForge" />
+      <div className="header__logo3d" style={{ width: 34, height: 34, flexShrink: 0 }}>
+        <LogoBadge3D glbUrl={ifLogoGlb} size={34} />
+      </div>
 
       <nav className="header__nav">
         {NAV.map((btn) => (

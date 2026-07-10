@@ -62,8 +62,17 @@ export default function AssetTray() {
               <div
                 key={item.id}
                 className="tray__thumb"
-                title={`${item.label} — click to view`}
-                style={{ cursor: "pointer" }}
+                title={`${item.label} — click to view, drag to the display`}
+                style={{ cursor: "grab" }}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    "application/x-interforge-asset",
+                    JSON.stringify({ src: item.src, display: item.thumbnailSrc, isGlb: isGlb(item), label: item.label }),
+                  );
+                  e.dataTransfer.setData("text/uri-list", item.thumbnailSrc);
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
                 onClick={() => setViewing(item)}
                 onContextMenu={(e) => handleThumbContext(e, item)}
               >

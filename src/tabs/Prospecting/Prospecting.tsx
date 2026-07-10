@@ -149,6 +149,28 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anvil.pendingReference]);
 
+  /* Drag an Asset Tray item onto the display → show it in the results view. */
+  const [dropActive, setDropActive] = useState(false);
+  function handleAssetDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDropActive(false);
+    let display: string | null = null;
+    const raw = e.dataTransfer.getData("application/x-interforge-asset");
+    if (raw) {
+      try { display = (JSON.parse(raw).display as string) ?? null; } catch { /* not our payload */ }
+    }
+    if (!display) display = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain") || null;
+    if (!display) return;
+    setWorkspaceMode("results");
+    setImages((prev) => {
+      const idx = prev.indexOf(display!);
+      if (idx >= 0) { setSelected(idx); return prev; }   // already shown → just select it
+      const next = [...prev, display!];
+      setSelected(next.length - 1);
+      return next;
+    });
+  }
+
   /* Output gallery */
   const [images,     setImages]     = useState<string[]>([]);
   const [imageMeta,  setImageMeta]  = useState<Record<number, ImageMeta>>({});
@@ -787,7 +809,13 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
       </aside>
 
       {/* ── RIGHT CANVAS ─────────────────────────────────────── */}
-      <section className="pros__canvas">
+      <section
+        className="pros__canvas"
+        onDrop={handleAssetDrop}
+        onDragOver={(e) => { e.preventDefault(); if (!dropActive) setDropActive(true); }}
+        onDragLeave={() => setDropActive(false)}
+        style={dropActive ? { outline: "2px dashed var(--yellow-core)", outlineOffset: -8 } : undefined}
+      >
         <div className="pros__canvas-toolbar">
           <span className="pros__canvas-info">
             {workspaceMode === "anvil"
