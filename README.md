@@ -11,18 +11,11 @@ entirely on your own machine. No subscriptions, no cloud, no data leaving your P
 
 ## Examples
 
-A concept prompt in, a textured 3D mesh out — all generated locally:
+Concept art generated locally from a text prompt (SDXL):
 
-<table>
-  <tr>
-    <td align="center"><b>Prompt → concept (SDXL)</b></td>
-    <td align="center"><b>Generated 3D mesh (SF3D)</b></td>
-  </tr>
-  <tr>
-    <td><img src="docs/examples/slime_concept.png" width="320" alt="Slime concept art"></td>
-    <td><img src="docs/examples/slime_3d.png" width="320" alt="Slime 3D mesh"></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/examples/slime_concept.png" width="320" alt="Slime concept art">
+</p>
 
 ---
 
