@@ -1,0 +1,11 @@
+# Normalize line endings so cross-platform clones aren't broken.
+# Shell scripts MUST be LF — a CRLF shebang (`#!/usr/bin/env bash\r`) fails to run.
+*.sh    text eol=lf
+*.bash  text eol=lf
+
+# Windows scripts stay CRLF.
+*.bat   text eol=crlf
+*.ps1   text eol=crlf
+
+# Let git auto-handle everything else.
+*       text=auto

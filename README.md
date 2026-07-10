@@ -99,19 +99,24 @@ pip install git+https://github.com/Stability-AI/stable-fast-3d.git
 npm run tauri dev
 ```
 
-**Browser-only dev** (backend + Vite in separate windows, open http://localhost:1420):
+**Browser-only dev** (backend + Vite together, open http://localhost:1420):
 
 ```powershell
 # Windows
 ./run-dev.ps1
 ```
 
-The Windows launchers (`run-dev.ps1`, `Launch-InterForge-Dev.bat`) use the `py -3.11`
-launcher and Windows shell tools. On macOS/Linux, start the two processes manually:
+```bash
+# Linux / macOS
+./run-dev.sh          # Ctrl-C stops both processes
+```
+
+`run-dev.sh` prefers `interforge-backend/.venv`'s Python, then `python3.11`. If
+you'd rather run the two processes by hand:
 
 ```bash
 # terminal 1 — backend
-cd interforge-backend && uvicorn main:app --host 127.0.0.1 --port 7842
+cd interforge-backend && python3.11 -m uvicorn main:app --host 127.0.0.1 --port 7842
 # terminal 2 — frontend
 npm run dev
 ```
