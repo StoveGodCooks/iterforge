@@ -25,12 +25,13 @@ BASE_NEGATIVE = (
     # applies to EVERY asset type + art style — illustrative styles (painterly,
     # sketch, cel-shaded, concept art) bias SDXL toward multi-figure scenes /
     # character sheets that a positive "one X only" cue can't hold back alone.
-    "multiple subjects, multiple objects, two characters, group of people, crowd, "
-    "character sheet, multiple views, duplicate, "
-    "shadow, ground shadow, ambient occlusion, reflection, glossy, "
-    "specular highlights, shiny, reflective surface, wet look, plastic sheen, glare, "
-    "gradient background, scene background, floor, pedestal, "
-    "blurry, low quality, jpeg artifacts, watermark, text, cropped, "
+    # Kept lean on purpose: the whole negative (base + per-asset) must fit CLIP's
+    # ~77-token window or the tail silently drops. Front-load the highest-value
+    # suppressors; drop synonyms rather than pad.
+    "multiple subjects, two characters, group of people, crowd, character sheet, duplicate, "
+    "shadow, ambient occlusion, reflection, glossy, specular highlights, wet look, glare, "
+    "scene background, floor, pedestal, gradient background, "
+    "blurry, low quality, watermark, text, cropped, "
     "deformed, bad anatomy, extra limbs, extra fingers, mutation"
 )
 
@@ -59,11 +60,15 @@ ASSET_NEGATIVES: dict[str, str] = {
         "inside-out, non-armor elements, background objects, on a person unless hero shot"
     ),
     "character": (
+        # Base/diorama killers first — illustrative styles love standing the
+        # figure on a rock/grass plinth, which SF3D reconstructs as one lump.
+        "diorama base, rock base, grass, terrain, ground platform, standing on rocks, "
         # realism killers — SF3D wants matte stylized input (gloss/shadow become fake geometry)
         "photorealistic, realistic skin, photograph, subsurface scattering, "
         "dramatic lighting, hyperdetailed, fine detail, extra heads, bad hands"
     ),
     "creature": (
+        "diorama base, rock base, grass, terrain, ground platform, standing on rocks, "
         "photorealistic, realistic skin, photograph, dramatic lighting, "
         "hyperdetailed, fine detail, extra heads, wrong limb count"
     ),

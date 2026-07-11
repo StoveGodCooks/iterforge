@@ -48,11 +48,14 @@ TEMPLATES_3D: dict[str, PromptTemplate] = {
         # SF3D-tuned: ¾ view + figure filling a square frame reconstructs far
         # better than the old "full body, front facing" (built for silhouette
         # carving). Dropped the detail/silhouette cues that pushed photoreal.
-        prefix="single stylized character, one character only, isolated on pure white, centered, three-quarter front view, full figure filling the frame,",
+        # "floating, levitating" (positive cues — never "no ground", which SDXL
+        # reads as a request for ground) kills the rock/grass display base that
+        # SF3D would otherwise fuse into the mesh as a lump.
+        prefix="single stylized character, one character only, floating, levitating, isolated on pure white, centered, three-quarter front view, full figure filling the frame,",
         suffix="pure white background, even flat lighting, clean stylized 3d game character",
     ),
     "creature": PromptTemplate(
-        prefix="single stylized fantasy creature, one creature only, isolated on pure white, centered, three-quarter view, figure filling the frame,",
+        prefix="single stylized fantasy creature, one creature only, floating, levitating, isolated on pure white, centered, three-quarter view, figure filling the frame,",
         suffix="pure white background, even flat lighting, clean stylized 3d game creature",
     ),
     "vehicle": PromptTemplate(
