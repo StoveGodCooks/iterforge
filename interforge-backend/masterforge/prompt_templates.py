@@ -44,18 +44,26 @@ TEMPLATES_3D: dict[str, PromptTemplate] = {
         prefix="single armor set, one armor only, isolated on pure white, floating, centered, full armor display,",
         suffix="pure white background, shadowless flat lighting, clean silhouette, sharp detail, highly detailed, professional game art",
     ),
+    # NOTE on "floating, levitating": correct for inanimate assets above, wrong
+    # for anything with limbs. It was added to kill the rock/grass display base,
+    # and on a prop or a sword it does exactly that. On a character SDXL reads
+    # it as a *pose* instruction and renders an airborne figure — legs trailing,
+    # limbs splayed, and frequently duplicated. That is the source of the wild
+    # poses and extra limbs, not the token budget.
+    #
+    # Ground suppression belongs in the negative, where "diorama base, rock
+    # base, grass, terrain, ground platform, standing on rocks" already lives.
+    # An explicit neutral pose replaces it here: it holds the figure still,
+    # which is also what SF3D reconstructs best.
     "character": PromptTemplate(
         # SF3D-tuned: ¾ view + figure filling a square frame reconstructs far
         # better than the old "full body, front facing" (built for silhouette
         # carving). Dropped the detail/silhouette cues that pushed photoreal.
-        # "floating, levitating" (positive cues — never "no ground", which SDXL
-        # reads as a request for ground) kills the rock/grass display base that
-        # SF3D would otherwise fuse into the mesh as a lump.
-        prefix="single stylized character, one character only, floating, levitating, isolated on pure white, centered, three-quarter front view, full figure filling the frame,",
+        prefix="single stylized character, one character only, standing upright in a neutral A-pose, arms relaxed at sides, isolated on pure white, centered, three-quarter front view, full figure filling the frame,",
         suffix="pure white background, even flat lighting, clean stylized 3d game character",
     ),
     "creature": PromptTemplate(
-        prefix="single stylized fantasy creature, one creature only, floating, levitating, isolated on pure white, centered, three-quarter view, figure filling the frame,",
+        prefix="single stylized fantasy creature, one creature only, standing upright in a neutral pose, isolated on pure white, centered, three-quarter view, figure filling the frame,",
         suffix="pure white background, even flat lighting, clean stylized 3d game creature",
     ),
     "vehicle": PromptTemplate(

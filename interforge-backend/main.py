@@ -62,6 +62,14 @@ def _startup_checks() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     _startup_checks()
+    # Prompts are measured against the real CLIP tokenizer before every
+    # generation. Loading it costs ~5s once; do that here rather than inside
+    # whichever request happens to be first.
+    try:
+        from masterforge.token_budget import warm
+        warm()
+    except Exception as exc:
+        logger.warning(f"[tokens] tokenizer warm-up skipped: {exc}")
     yield
 
 

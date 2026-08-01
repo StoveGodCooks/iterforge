@@ -19,6 +19,7 @@ from core.sse import (
 )
 from masterforge.asset_configs import get_config, normalize_asset_type
 from masterforge.negative_prompts import get_negative
+from masterforge.token_budget import fit
 from masterforge.lighting_presets import get_lighting_tokens
 from masterforge.style_modifiers import apply_style
 from masterforge.prompt_templates import build_templated_prompt
@@ -60,6 +61,10 @@ async def run_prospect(job: Job, params: dict) -> None:
     full_prompt = styled["prompt"]
     if lighting_tokens:
         full_prompt = f"{full_prompt}, {lighting_tokens}"
+    # Template + style + lighting ran 87-89 tokens, so CLIP was silently eating
+    # the tail — which is where the lighting cues had just been appended. Trim
+    # on clause boundaries and log it instead.
+    full_prompt = fit(full_prompt, label=f"positive[{asset_type}/{art_style}]")
 
     # Always start with system negatives (BASE + asset-specific) and append
     # the user's text as *extras* — never let the UI string override the

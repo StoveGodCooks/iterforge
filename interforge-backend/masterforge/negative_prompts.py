@@ -7,6 +7,8 @@ universal base negatives at build time.
 """
 from __future__ import annotations
 
+from masterforge.token_budget import fit
+
 # ── Universal base ────────────────────────────────────────────
 # Applied to every generation regardless of asset type or style.
 # Rule philosophy: fight the model's actual failure tendencies, not abstract
@@ -28,11 +30,18 @@ BASE_NEGATIVE = (
     # Kept lean on purpose: the whole negative (base + per-asset) must fit CLIP's
     # ~77-token window or the tail silently drops. Front-load the highest-value
     # suppressors; drop synonyms rather than pad.
-    "multiple subjects, two characters, group of people, crowd, character sheet, duplicate, "
-    "shadow, ambient occlusion, reflection, glossy, specular highlights, wet look, glare, "
-    "scene background, floor, pedestal, gradient background, "
+    # MEASURED, not estimated. This block was 76 tokens on its own, which left
+    # exactly zero room for the per-asset negatives below — every one of them
+    # was truncated away in full, including the anatomy and ground-plane
+    # suppressors. Deduplicated down to ~45 so the asset layer actually lands.
+    # Synonyms dropped rather than concepts: "glossy" carries "wet look" and
+    # "glare"; "crowd" carries "group of people"; "duplicate" carries "two
+    # characters". Anatomy terms are kept whole — they are the point.
+    "multiple subjects, crowd, character sheet, duplicate, "
+    "shadow, reflection, glossy, specular highlights, "
+    "scene background, floor, pedestal, "
     "blurry, low quality, watermark, text, cropped, "
-    "deformed, bad anatomy, extra limbs, extra fingers, mutation"
+    "deformed, bad anatomy, extra limbs, extra legs, extra fingers, mutation"
 )
 
 # ── Per asset type negatives ──────────────────────────────────
@@ -59,18 +68,21 @@ ASSET_NEGATIVES: dict[str, str] = {
         "floating pieces, asymmetrical unless intentional, broken straps, "
         "inside-out, non-armor elements, background objects, on a person unless hero shot"
     ),
+    # The ground-plane killers now carry the whole job of suppressing the
+    # rock/grass plinth — the positive templates used to help by asking for a
+    # "floating, levitating" figure, which is what produced the airborne poses.
+    # These must survive the token cut, so they lead.
     "character": (
-        # Base/diorama killers first — illustrative styles love standing the
-        # figure on a rock/grass plinth, which SF3D reconstructs as one lump.
-        "diorama base, rock base, grass, terrain, ground platform, standing on rocks, "
-        # realism killers — SF3D wants matte stylized input (gloss/shadow become fake geometry)
-        "photorealistic, realistic skin, photograph, subsurface scattering, "
-        "dramatic lighting, hyperdetailed, fine detail, extra heads, bad hands"
+        "diorama base, grass, terrain, standing on rocks, "
+        "extra heads, bad hands, wrong limb count, "
+        "action pose, dynamic pose, jumping, flying, "
+        "photorealistic, realistic skin, dramatic lighting"
     ),
     "creature": (
-        "diorama base, rock base, grass, terrain, ground platform, standing on rocks, "
-        "photorealistic, realistic skin, photograph, dramatic lighting, "
-        "hyperdetailed, fine detail, extra heads, wrong limb count"
+        "diorama base, grass, terrain, standing on rocks, "
+        "extra heads, wrong limb count, extra tails, "
+        "action pose, dynamic pose, jumping, flying, "
+        "photorealistic, realistic skin, dramatic lighting"
     ),
     "vehicle": (
         "floating wheels, asymmetrical unless stylized, broken geometry, "
@@ -131,11 +143,16 @@ def get_negative(asset_type: str, extra: str = "") -> str:
     """
     Returns the full negative prompt for an asset type.
     Combines BASE_NEGATIVE + asset-specific negative + any caller-supplied extras.
+
+    The user's own extras go FIRST after the base: they are the one part of this
+    string nobody else can supply, so if anything has to be cut it should not be
+    them. Fitted to CLIP's window so the tail is dropped on a clause boundary
+    with a log line, rather than silently mid-phrase inside the tokenizer.
     """
     asset_neg = ASSET_NEGATIVES.get(asset_type, "")
     parts = [BASE_NEGATIVE]
-    if asset_neg:
-        parts.append(asset_neg)
     if extra:
         parts.append(extra)
-    return ", ".join(parts)
+    if asset_neg:
+        parts.append(asset_neg)
+    return fit(", ".join(parts), label=f"negative[{asset_type}]")

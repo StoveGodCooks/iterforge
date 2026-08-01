@@ -19,7 +19,12 @@ class LightingPreset:
 LIGHTING_PRESETS: dict[str, LightingPreset] = {
     "flat_asset": LightingPreset(
         name="Flat Asset",
-        tokens="flat even lighting, no shadows, neutral light",
+        # "no shadows" broke this package's own rule: SDXL tokenizes it as
+        # "no" + "shadows" and weights "shadows" normally, so it asked for the
+        # thing it meant to forbid. Shadow suppression is in BASE_NEGATIVE.
+        # The rest duplicated the templates' "even flat lighting" suffix, which
+        # is what pushed the positive prompt past 77 tokens.
+        tokens="shadowless neutral light",
         description="Flat shadowless lighting for 3D-reconstruction assets — SF3D-friendly. "
                     "Directional/outdoor lighting bakes shadows into the mesh texture.",
     ),
