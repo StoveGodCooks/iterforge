@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Optional
 
 from core.config import CHECKPOINTS_DIR
@@ -138,15 +139,35 @@ def resolve_source(m: ModelDef) -> str:
     return m.source
 
 
+def _hf_cached(repo_id: str) -> bool:
+    """Has this repo already been pulled into the local HF cache?
+
+    The picker badged every hf_repo model "↓ download" because it keyed off
+    `local`, which only ever meant "a .safetensors sitting in CHECKPOINTS_DIR".
+    A fully cached 6.7 GB SDXL base still advertised a download. Checking the
+    cache directly is what the badge actually wanted to know.
+    """
+    try:
+        from huggingface_hub.constants import HF_HUB_CACHE
+        snaps = Path(HF_HUB_CACHE) / f"models--{repo_id.replace('/', '--')}" / "snapshots"
+        if not snaps.is_dir():
+            return False
+        # A ref directory with no snapshot in it is an interrupted download.
+        return any(any(s.iterdir()) for s in snaps.iterdir() if s.is_dir())
+    except Exception:
+        # Never let a cache probe take the model picker down.
+        return False
+
+
 def list_models() -> list[dict]:
     """Full picker payload: builtins + scanned local checkpoints, each tagged
-    with `available` (local file present) so the UI can flag downloads."""
+    with `downloaded` so the UI can flag what still needs fetching."""
     out: list[dict] = []
     for m in [*BUILTINS, *_scanned_models()]:
         if m.source_type == "local_file":
-            available = (CHECKPOINTS_DIR / m.source).exists()
+            downloaded = (CHECKPOINTS_DIR / m.source).exists()
         else:
-            available = True  # hf_repo: downloads on first use
+            downloaded = _hf_cached(m.source)
         out.append({
             "id": m.id,
             "label": m.label,
@@ -156,6 +177,10 @@ def list_models() -> list[dict]:
             "default": m.default,
             "enabled": m.enabled,
             "local": m.source_type == "local_file",
-            "available": available,
+            # On disk and ready to load — the flag the picker should badge on.
+            "downloaded": downloaded,
+            # Kept for older callers; it meant the same thing for local files
+            # and was hardcoded true for hf_repo.
+            "available": downloaded if m.source_type == "local_file" else True,
         })
     return out

@@ -127,8 +127,9 @@ export interface ModelInfo {
   license:   string;
   default:   boolean;
   enabled:   boolean;   // false = shown but not selectable (e.g. FLUX stub)
-  local:     boolean;   // true = a local checkpoint file (vs downloaded HF repo)
-  available: boolean;   // local file present, or hf_repo (downloads on first use)
+  local:      boolean;  // true = a local checkpoint file (vs an HF repo)
+  downloaded: boolean;  // on disk and ready to load — checkpoint file, or HF cache hit
+  available:  boolean;  // legacy: local file present, or hf_repo (always true)
 }
 
 /** One comic panel in the Anvil Sketch Board. */

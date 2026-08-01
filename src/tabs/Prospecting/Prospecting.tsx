@@ -851,7 +851,11 @@ export default function Prospecting({ onLock, onJumpTo, tinkerMode }: Props) {
                       <div className="lora-card__info">
                         <span className="lora-card__name">{m.label}</span>
                         <span className="badge badge--yellow">{m.license}</span>
-                        {!m.local && <span className="badge">↓ download</span>}
+                        {/* Badge what still needs fetching, not what happens to
+                            live outside the checkpoints folder. `local` is only
+                            "is it a .safetensors on disk here" — a fully cached
+                            HF model is not local, but it is downloaded. */}
+                        {!m.downloaded && <span className="badge">↓ download</span>}
                         {disabled && <span className="badge">soon</span>}
                       </div>
                       <span
