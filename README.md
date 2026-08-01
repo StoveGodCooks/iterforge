@@ -9,13 +9,45 @@ entirely on your own machine. No subscriptions, no cloud, no data leaving your P
 
 ---
 
-## Examples
+## One concept, three modes
 
-Concept art generated locally from a text prompt (SDXL):
+Most generators pick a single output format and make you live with it. A
+background prop does not need the triangles a hero character does, so the same
+locked concept goes down whichever branch the asset actually warrants.
 
-<p align="center">
-  <img src="docs/examples/slime_concept.png" width="320" alt="Slime concept art">
-</p>
+| Concept | 2D sprite | 2.5D relief | 3D mesh |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/examples/knight_concept.png" width="200" alt="Knight concept art"> | <img src="docs/examples/knight_2d.png" width="200" alt="Knight as a textured quad"> | <img src="docs/examples/knight_25d.png" width="200" alt="Knight as a depth relief"> | <img src="docs/examples/knight_3d.png" width="200" alt="Knight as full 3D geometry"> |
+| SDXL, background stripped | 2 tris · 4 verts | 14,282 tris · 7,484 verts | 20,344 tris · 15,548 verts |
+| the locked source | a textured quad — still a `.glb` | solid from the front, hollow behind | geometry all the way around |
+
+Counts are read from the glTF accessors, not estimated. Every mesh above came
+out of the concept plate to its left; none of it was remodelled by hand.
+
+**A sprite is still a GLB.** All three routes end in the same file format, so a
+2D asset drops into the same engine pipeline as a 3D one.
+
+> **On the 2.5D route:** a relief is built by pushing each pixel back by its
+> depth, so wherever the depth map jumps — a pauldron against the background —
+> it stretches a skirt of long thin triangles across the gap. Roughly 3% of
+> faces, each 6–26× longer than any real edge. Culling those by edge length is
+> on the roadmap; until then a relief export may need a pass. The full 3D route
+> has none of it (longest edge under 2× the median).
+
+---
+
+## Why local
+
+- **Metered tools punish iteration.** Cloud generators bill per generation, so
+  the fortieth attempt costs the same as the first. Here the marginal cost of
+  trying again is zero, which changes how you work more than any feature does.
+- **Your concepts stay yours.** Nothing is uploaded — no prompt, no reference
+  image, no output — which matters if you are working on something unannounced.
+- **It still works offline.** Once the weights are downloaded there is no
+  service to be rate-limited by, deprecated under you, or priced out of.
+- **It fits an 8 GB card.** A VRAM arbiter keeps exactly one heavy model
+  resident at a time, so an RTX 3070 runs the whole pipeline rather than
+  running out halfway through.
 
 ---
 
@@ -164,6 +196,34 @@ python -m pytest        # backend unit + integration tests
 # from repo root — frontend type-check
 npm run build           # runs tsc && vite build
 ```
+
+## Roadmap
+
+Summarised from [`docs/ROADMAP.md`](docs/ROADMAP.md), which stays authoritative.
+
+**Shipped**
+- Prospect, Smelt, Forge and Anvil, end to end
+- Stable Fast 3D — single image to UV-textured GLB
+- Direct inference via `diffusers`; ComfyUI removed entirely
+- VRAM arbiter — one heavy model resident, so 8 GB is enough
+- Pluggable model registry; drop your own checkpoints in
+- IP-Adapter identity, ControlNet pose, LoRA support
+
+**Up next**
+- Linux dev launcher to match the Windows one — closest to done
+- macOS: an MPS/Metal device path and a non-CUDA texture bake
+- InstantMesh as a 16 GB tier — fixes SF3D's shallow back
+- Speed mode via LCM LoRA — roughly 12–15 steps instead of 30
+- State persistence, so restarting the app does not lose work
+- True FBX export via headless Blender
+- Cull depth-discontinuity spikes inside the 2.5D relief route
+
+**Later**
+- Sprite animation — walk cycles, Godot `.tres` and Unity metadata
+- Rigging hints — landmarks to proxy bones in the GLB
+- LoRA fine-tuning on your own art style
+
+---
 
 ## License
 
